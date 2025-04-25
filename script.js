@@ -17,11 +17,11 @@ liveStatusElement.textContent = "Script loaded, preparing connection...";
 // !!               is a security risk if your code repository is public.
 // !!               Consider using a backend proxy for better security in production.
 const PARTICLE_DEVICE_ID = "240039000e47353136383631"; // <--- REPLACE THIS
-const PARTICLE_ACCESS_TOKEN = "0701954b847241e3e75037062a6344baadf9db88"; // <--- REPLACE THIS
+const PARTICLE_ACCESS_TOKEN = "28f3c69720f69b2ffbdcdd0534b67f49e4f1030e"; // <--- REPLACE THIS
 const PARTICLE_EVENT_NAME = "currentTemps"; // The event name published by your device
 // -------------------
 
-if (!PARTICLE_DEVICE_ID || PARTICLE_DEVICE_ID === "240039000e47353136383631" || !PARTICLE_ACCESS_TOKEN || PARTICLE_ACCESS_TOKEN === "0701954b847241e3e75037062a6344baadf9db88") {
+if (!PARTICLE_DEVICE_ID || PARTICLE_DEVICE_ID === "240039000e47353136383631" || !PARTICLE_ACCESS_TOKEN || PARTICLE_ACCESS_TOKEN === "28f3c69720f69b2ffbdcdd0534b67f49e4f1030e") {
     liveStatusElement.textContent = "Error: Device ID or Access Token not set in script.js!";
     liveStatusElement.style.color = 'red';
     console.error("Please set your PARTICLE_DEVICE_ID and PARTICLE_ACCESS_TOKEN in script.js");
