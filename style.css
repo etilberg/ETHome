@@ -1,0 +1,56 @@
+body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 20px;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+h1 {
+    color: #0056b3; /* A slightly darker blue */
+    text-align: center;
+}
+
+h2 {
+    color: #0056b3;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 5px;
+}
+
+section {
+    background-color: #fff;
+    margin-bottom: 20px;
+    padding: 15px;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+#live-data-section div {
+    margin-bottom: 10px;
+}
+
+#live-data-section span,
+#last-updated {
+    font-weight: bold;
+    color: #e8491d; /* An orange color for data points */
+}
+
+#live-status {
+    font-style: italic;
+    color: #555;
+}
+
+#historical-chart-container {
+    min-height: 200px; /* Give chart area some space */
+    background-color: #eee; /* Placeholder background */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+    border-radius: 3px;
+}
+
+small {
+    color: #666;
+}

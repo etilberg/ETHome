@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Particle Data Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <h1>My Particle Device Dashboard</h1>
+
+    <section id="live-data-section">
+        <h2>Live Data</h2>
+        <p>Status: <span id="live-status">Connecting...</span></p>
+        <div>
+            Temperature: <span id="live-temp">--</span> &deg;C 
+        </div>
+        <div>
+            Humidity: <span id="live-humidity">--</span> %
+        </div>
+        <p><small>Last updated: <span id="last-updated">Never</span></small></p>
+    </section>
+
+    <section id="historical-data-section">
+        <h2>Historical Data</h2>
+        <p>Data from Google Sheets will be displayed below.</p>
+        <div id="historical-chart-container">
+            Chart will load here...
+        </div>
+    </section>
+
+    <script src="script.js"></script>
+</body>
+</html>
