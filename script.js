@@ -21,7 +21,7 @@ const PARTICLE_ACCESS_TOKEN = "28f3c69720f69b2ffbdcdd0534b67f49e4f1030e"; // <--
 const PARTICLE_EVENT_NAME = "currentTemps"; // The event name published by your device
 // -------------------
 
-if (!PARTICLE_DEVICE_ID || PARTICLE_DEVICE_ID === "Nope" || !PARTICLE_ACCESS_TOKEN || PARTICLE_ACCESS_TOKEN === "Nope") {
+if (!PARTICLE_DEVICE_ID || PARTICLE_DEVICE_ID === "YOUR_DEVICE_ID_HERE" || !PARTICLE_ACCESS_TOKEN || PARTICLE_ACCESS_TOKEN === "YOUR_PARTICLE_ACCESS_TOKEN_HERE") {
     liveStatusElement.textContent = "Error: Device ID or Access Token not set in script.js!";
     liveStatusElement.style.color = 'red';
     console.error("Please set your PARTICLE_DEVICE_ID and PARTICLE_ACCESS_TOKEN in script.js");
