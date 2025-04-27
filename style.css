@@ -16,6 +16,7 @@ h2 {
     color: #0056b3;
     border-bottom: 1px solid #ccc;
     padding-bottom: 5px;
+    margin-top: 20px; /* Add margin between section titles */
 }
 
 section {
@@ -26,12 +27,18 @@ section {
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-#live-data-section div {
-    margin-bottom: 10px;
+/* Style for live data values */
+.live-values {
+    display: flex;
+    justify-content: space-around; /* Space out the values */
+    flex-wrap: wrap; /* Allow wrapping on small screens */
+    margin: 10px 0;
+}
+.live-values div {
+    margin: 5px 10px;
 }
 
-#live-data-section span,
-#last-updated {
+#live-data-section span {
     font-weight: bold;
     color: #e8491d; /* An orange color for data points */
 }
@@ -39,9 +46,26 @@ section {
 #live-status {
     font-style: italic;
     color: #555;
+    /* Reset other styles if needed */
+    font-weight: normal;
+    color: #555;
 }
 
-#historical-chart-container {
+/* Style for chart containers */
+.chart-container {
+    position: relative;
+    margin: 20px auto; /* Add space between charts */
+    height: 20vh; /* Adjust height as needed */
+    width: 80vw; /* Adjust width as needed */
+    max-width: 600px; /* Max width for larger screens */
+    background-color: #f9f9f9;
+    padding: 10px;
+    border-radius: 3px;
+    border: 1px solid #eee;
+}
+
+
+#historical-chart-container-gsheets { /* Renamed historical placeholder */
     min-height: 200px; /* Give chart area some space */
     background-color: #eee; /* Placeholder background */
     display: flex;
