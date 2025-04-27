@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Particle Data Dashboard</title>
     <link rel="stylesheet" href="style.css">
-</head>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@^2"></script> <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@^1"></script> </head>
 <body>
 
     <h1>My Particle Device Dashboard</h1>
@@ -13,23 +14,33 @@
     <section id="live-data-section">
         <h2>Live Data</h2>
         <p>Status: <span id="live-status">Initializing...</span></p>
-        <div>
-            Fridge: <span id="live-fridge">--</span> &deg;F
-        </div>
-        <div>
-            Freezer: <span id="live-freezer">--</span> &deg;F
-        </div>
-        <div>
-            Garage: <span id="live-garage">--</span> &deg;F
+        <div class="live-values">
+            <div>Fridge: <span id="live-fridge">--</span> &deg;F</div>
+            <div>Freezer: <span id="live-freezer">--</span> &deg;F</div>
+            <div>Garage: <span id="live-garage">--</span> &deg;F</div>
         </div>
         <p><small>Last updated: <span id="last-updated">Never</span></small></p>
     </section>
 
+    <section id="chart-section">
+        <h2>Recent History</h2>
+        <div class="chart-container">
+            <canvas id="fridgeChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="freezerChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="garageChart"></canvas>
+        </div>
+    </section>
+
+
     <section id="historical-data-section">
-        <h2>Historical Data</h2>
-        <p>Data from Google Sheets will be displayed below.</p>
-        <div id="historical-chart-container">
-            Chart will load here...
+        <h2>Long-Term Historical Data (Google Sheets)</h2>
+        <p>Data from Google Sheets will be displayed below (logic not yet implemented).</p>
+        <div id="historical-chart-container-gsheets">
+            Google Sheets Chart will load here...
         </div>
     </section>
 
