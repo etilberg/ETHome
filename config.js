@@ -16,7 +16,7 @@ const SUMP_MONITOR_ACCESS_TOKEN = "28f3c69720f69b2ffbdcdd0534b67f49e4f1030e"; //
 // You could also move constants like these here if you prefer:
 const TEMP_MONITOR_EVENT_NAME = "currentTemps";
 const SUMP_MONITOR_EVENT_NAME = "sumpData";
-const MAX_HISTORY_POINTS = 30; // History for Fridge/Freezer charts
+const MAX_HISTORY_POINTS = 60; // History for Fridge/Freezer charts
 
 // --- End of Configuration ---
 console.log("DEBUG: config.js loaded.");
