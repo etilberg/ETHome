@@ -8,7 +8,7 @@ body {
 }
 
 h1 {
-    color: #0056b3; /* A slightly darker blue */
+    color: #0056b3;
     text-align: center;
 }
 
@@ -16,48 +16,64 @@ h2 {
     color: #0056b3;
     border-bottom: 1px solid #ccc;
     padding-bottom: 5px;
-    margin-top: 20px; /* Add margin between section titles */
+    margin-top: 0; /* Remove top margin for section titles */
+    margin-bottom: 15px;
+}
+
+h3 {
+    color: #444;
+    margin-top: 25px;
+    margin-bottom: 10px;
+    border-bottom: 1px dashed #eee;
+    padding-bottom: 3px;
 }
 
 section {
     background-color: #fff;
     margin-bottom: 20px;
-    padding: 15px;
+    padding: 15px 20px; /* Added horizontal padding */
     border-radius: 5px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-/* Style for live data values */
+/* Style for live data values container */
 .live-values {
     display: flex;
-    justify-content: space-around; /* Space out the values */
-    flex-wrap: wrap; /* Allow wrapping on small screens */
+    justify-content: space-around;
+    flex-wrap: wrap;
     margin: 10px 0;
+    padding: 10px 0;
+    border-top: 1px solid #eee;
+     border-bottom: 1px solid #eee;
 }
 .live-values div {
     margin: 5px 10px;
+    text-align: center; /* Center text below value */
 }
-
-#live-data-section span {
+.live-values span { /* Style the actual value */
     font-weight: bold;
-    color: #e8491d; /* An orange color for data points */
+    color: #e8491d;
+    display: block; /* Make span take full width for centering */
+    font-size: 1.1em;
 }
 
-#live-status {
+
+/* Status indicators within H2 */
+h2 span {
     font-style: italic;
-    color: #555;
-    /* Reset other styles if needed */
+    font-size: 0.8em;
     font-weight: normal;
     color: #555;
 }
 
+
 /* Style for chart containers */
 .chart-container {
     position: relative;
-    margin: 20px auto; /* Add space between charts */
-    height: 20vh; /* Adjust height as needed */
-    width: 80vw; /* Adjust width as needed */
-    max-width: 600px; /* Max width for larger screens */
+    margin: 15px auto; /* Reduced space between charts */
+    height: 20vh;
+    width: 90%; /* Make charts slightly wider within section */
+    max-width: 600px;
     background-color: #f9f9f9;
     padding: 10px;
     border-radius: 3px;
@@ -65,9 +81,9 @@ section {
 }
 
 
-#historical-chart-container-gsheets { /* Renamed historical placeholder */
-    min-height: 200px; /* Give chart area some space */
-    background-color: #eee; /* Placeholder background */
+#historical-chart-container-gsheets {
+    min-height: 200px;
+    background-color: #eee;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -77,4 +93,7 @@ section {
 
 small {
     color: #666;
+    display: block; /* Ensure small text is on its own line */
+    text-align: right; /* Align timestamp to the right */
+    margin-top: 5px;
 }
