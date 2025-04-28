@@ -3,27 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Particle Data Dashboard</title>
+    <title>Multi-Device Dashboard</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/moment@^2"></script> <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@^1"></script> </head>
+    <script src="https://cdn.jsdelivr.net/npm/moment@^2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@^1"></script>
+</head>
 <body>
 
-    <h1>My Particle Device Dashboard</h1>
+    <h1>Multi-Device Dashboard</h1>
 
-    <section id="live-data-section">
-        <h2>Live Data</h2>
-        <p>Status: <span id="live-status">Initializing...</span></p>
-        <div class="live-values">
+    <section id="temp-monitor-section">
+        <h2>Fridge/Freezer Monitor (<span id="temp-monitor-status">Initializing...</span>)</h2>
+         <div class="live-values">
             <div>Fridge: <span id="live-fridge">--</span> &deg;F</div>
             <div>Freezer: <span id="live-freezer">--</span> &deg;F</div>
             <div>Garage: <span id="live-garage">--</span> &deg;F</div>
         </div>
-        <p><small>Last updated: <span id="last-updated">Never</span></small></p>
-    </section>
-
-    <section id="chart-section">
-        <h2>Recent History</h2>
+         <p><small>Last updated: <span id="temp-monitor-last-updated">Never</span></small></p>
+        <h3>Recent History (Fridge/Freezer Monitor)</h3>
         <div class="chart-container">
             <canvas id="fridgeChart"></canvas>
         </div>
@@ -35,6 +33,16 @@
         </div>
     </section>
 
+    <section id="sump-monitor-section">
+        <h2>Sump Pump Monitor (<span id="sump-monitor-status">Initializing...</span>)</h2>
+         <div class="live-values">
+            <div>Temperature: <span id="sump-temp">--</span> &deg;F</div>
+            <div>Ext. Power: <span id="sump-power">--</span> V</div>
+            <div>Last Run Time: <span id="sump-runtime">--</span> s</div>
+            <div>Time Since Last Run: <span id="sump-since-run">--</span> min</div>
+        </div>
+         <p><small>Last updated: <span id="sump-monitor-last-updated">Never</span></small></p>
+        </section>
 
     <section id="historical-data-section">
         <h2>Long-Term Historical Data (Google Sheets)</h2>
@@ -44,6 +52,7 @@
         </div>
     </section>
 
+    <script src="config.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
