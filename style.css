@@ -3,37 +3,37 @@ body {
     line-height: 1.6;
     margin: 0;
     padding: 20px;
-    background-color: #f4f4f4;
-    color: #333;
+    background-color: #121212;
+    color: #e0e0e0;
 }
 
 h1 {
-    color: #0056b3;
+    color: #90caf9;
     text-align: center;
 }
 
 h2 {
-    color: #0056b3;
-    border-bottom: 1px solid #ccc;
+    color: #90caf9;
+    border-bottom: 1px solid #333;
     padding-bottom: 5px;
-    margin-top: 0; /* Remove top margin for section titles */
+    margin-top: 0;
     margin-bottom: 15px;
 }
 
 h3 {
-    color: #444;
+    color: #b0bec5;
     margin-top: 25px;
     margin-bottom: 10px;
-    border-bottom: 1px dashed #eee;
+    border-bottom: 1px dashed #333;
     padding-bottom: 3px;
 }
 
 section {
-    background-color: #fff;
+    background-color: #1e1e1e;
     margin-bottom: 20px;
-    padding: 15px 20px; /* Added horizontal padding */
+    padding: 15px 20px;
     border-radius: 5px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
 }
 
 /* Style for live data values container */
@@ -43,57 +43,54 @@ section {
     flex-wrap: wrap;
     margin: 10px 0;
     padding: 10px 0;
-    border-top: 1px solid #eee;
-     border-bottom: 1px solid #eee;
+    border-top: 1px solid #333;
+    border-bottom: 1px solid #333;
 }
 .live-values div {
     margin: 5px 10px;
-    text-align: center; /* Center text below value */
+    text-align: center;
 }
-.live-values span { /* Style the actual value */
+.live-values span {
     font-weight: bold;
-    color: #e8491d;
-    display: block; /* Make span take full width for centering */
+    color: #ff7043;
+    display: block;
     font-size: 1.1em;
 }
-
 
 /* Status indicators within H2 */
 h2 span {
     font-style: italic;
     font-size: 0.8em;
     font-weight: normal;
-    color: #555;
+    color: #bbb;
 }
-
 
 /* Style for chart containers */
 .chart-container {
     position: relative;
-    margin: 15px auto; /* Reduced space between charts */
+    margin: 15px auto;
     height: 20vh;
-    width: 90%; /* Make charts slightly wider within section */
+    width: 90%;
     max-width: 600px;
-    background-color: #f9f9f9;
+    background-color: #222;
     padding: 10px;
     border-radius: 3px;
-    border: 1px solid #eee;
+    border: 1px solid #333;
 }
-
 
 #historical-chart-container-gsheets {
     min-height: 200px;
-    background-color: #eee;
+    background-color: #2c2c2c;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #666;
+    color: #aaa;
     border-radius: 3px;
 }
 
 small {
-    color: #666;
-    display: block; /* Ensure small text is on its own line */
-    text-align: right; /* Align timestamp to the right */
+    color: #aaa;
+    display: block;
+    text-align: right;
     margin-top: 5px;
 }
