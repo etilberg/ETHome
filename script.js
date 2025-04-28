@@ -53,7 +53,7 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
         options: {
             responsive: true, maintainAspectRatio: false,
             scales: {
-                x: { type: 'time', time: { unit: 'second', tooltipFormat: 'h:mm:ss a', displayFormats: { second: 'h:mm:ss a' } }, title: { display: true, text: 'Time' } },
+                x: { type: 'time', time: { unit: 'second', tooltipFormat: 'h:mm a', displayFormats: { second: 'h:mm a' } }, title: { display: true, text: 'Time' } },
                 y: { beginAtZero: false, title: { display: true, text: yLabel } }
             },
             plugins: { legend: { display: true } }
