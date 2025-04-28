@@ -1,178 +1,222 @@
 // --- Configuration ---
-// !! IMPORTANT: Replace these placeholders with your actual Device ID and Access Token !!
-// !! SECURITY WARNING: Remember the risk of embedding tokens in public client-side code !!
-const PARTICLE_DEVICE_ID = "240039000e47353136383631"; // <--- REPLACE THIS
-const PARTICLE_ACCESS_TOKEN = "28f3c69720f69b2ffbdcdd0534b67f49e4f1030e"; // <--- REPLACE THIS
-const PARTICLE_EVENT_NAME = "currentTemps"; // The event name published by your device
-
-const MAX_HISTORY_POINTS = 30; // Number of data points to store and display in graphs
+// Configuration constants (like TEMP_MONITOR_DEVICE_ID, TEMP_MONITOR_ACCESS_TOKEN,
+// SUMP_MONITOR_DEVICE_ID, SUMP_MONITOR_ACCESS_TOKEN, TEMP_MONITOR_EVENT_NAME,
+// SUMP_MONITOR_EVENT_NAME, MAX_HISTORY_POINTS) are now defined in config.js
+// and expected to be available globally when this script runs.
+// Make sure config.js is loaded BEFORE script.js in your index.html!
 
 // --- Get HTML Element References ---
-const liveStatusElement = document.getElementById('live-status');
+// Temp Monitor Elements
+const tempMonitorStatusElement = document.getElementById('temp-monitor-status');
 const liveFridgeElement = document.getElementById('live-fridge');
 const liveFreezerElement = document.getElementById('live-freezer');
 const liveGarageElement = document.getElementById('live-garage');
-const lastUpdatedElement = document.getElementById('last-updated');
+const tempMonitorLastUpdatedElement = document.getElementById('temp-monitor-last-updated');
+// Sump Monitor Elements
+const sumpMonitorStatusElement = document.getElementById('sump-monitor-status');
+const sumpTempElement = document.getElementById('sump-temp');
+const sumpPowerElement = document.getElementById('sump-power');
+const sumpRuntimeElement = document.getElementById('sump-runtime');
+const sumpSinceRunElement = document.getElementById('sump-since-run');
+const sumpMonitorLastUpdatedElement = document.getElementById('sump-monitor-last-updated');
 
-// --- Data Storage ---
+// --- Data Storage (Temp Monitor Only for now) ---
 let timeHistory = [];
 let fridgeHistory = [];
 let freezerHistory = [];
 let garageHistory = [];
 
-// --- Chart Initialization ---
+// --- Chart Initialization (Temp Monitor Only for now) ---
 let fridgeChartInstance, freezerChartInstance, garageChartInstance;
 
-function createChart(canvasId, label, borderColor) {
-    const ctx = document.getElementById(canvasId).getContext('2d');
+function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)') {
+    const canvasElement = document.getElementById(canvasId);
+    if (!canvasElement) {
+        console.error(`DEBUG: Canvas element with ID '${canvasId}' not found!`);
+        return null;
+    }
+    const ctx = canvasElement.getContext('2d');
+     if (!ctx) {
+        console.error(`DEBUG: Failed to get 2D context for canvas ID '${canvasId}'!`);
+        return null;
+    }
+    console.log(`DEBUG: Creating chart for canvas ID '${canvasId}'`);
     return new Chart(ctx, {
         type: 'line',
-        data: {
-            labels: [], // Initialize with empty labels (timestamps)
-            datasets: [{
-                label: label,
-                data: [], // Initialize with empty data
-                borderColor: borderColor,
-                borderWidth: 2,
-                fill: false,
-                tension: 0.1 // Makes the line slightly curved
-            }]
-        },
+        data: { labels: [], datasets: [{ label: label, data: [], borderColor: borderColor, borderWidth: 2, fill: false, tension: 0.1 }] },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false,
             scales: {
-                x: {
-                    type: 'time', // Use time adapter
-                    time: {
-                        unit: 'second', // Adjust time unit as needed (minute, hour)
-                        tooltipFormat: 'h:mm:ss a', // Format for tooltips
-                         displayFormats: {
-                           second: 'h:mm:ss a' // Format for axis labels
-                         }
-                    },
-                    title: {
-                        display: true,
-                        text: 'Time'
-                    }
-                },
-                y: {
-                    beginAtZero: false, // Auto-scale based on data
-                    title: {
-                        display: true,
-                        text: 'Temperature (°F)'
-                    }
-                }
+                x: { type: 'time', time: { unit: 'second', tooltipFormat: 'h:mm:ss a', displayFormats: { second: 'h:mm:ss a' } }, title: { display: true, text: 'Time' } },
+                y: { beginAtZero: false, title: { display: true, text: yLabel } }
             },
-            plugins: {
-                legend: {
-                    display: true // Show legend (dataset label)
-                }
-            }
+            plugins: { legend: { display: true } }
         }
     });
 }
 
 // Initialize charts once the DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-     console.log("DOM loaded, initializing charts.");
+     console.log("DEBUG: DOM loaded, initializing charts.");
+     // Ensure config variables are loaded before trying to use them here or in connect functions
+     if (typeof TEMP_MONITOR_DEVICE_ID === 'undefined') {
+         console.error("DEBUG: Configuration variables from config.js seem to be missing!");
+         // Display an error to the user?
+         tempMonitorStatusElement.textContent = "Config Error!";
+         tempMonitorStatusElement.style.color = 'red';
+         sumpMonitorStatusElement.textContent = "Config Error!";
+         sumpMonitorStatusElement.style.color = 'red';
+         return; // Stop further execution if config is missing
+     }
+
      fridgeChartInstance = createChart('fridgeChart', 'Fridge Temp (°F)', 'rgb(255, 99, 132)');
      freezerChartInstance = createChart('freezerChart', 'Freezer Temp (°F)', 'rgb(54, 162, 235)');
      garageChartInstance = createChart('garageChart', 'Garage Temp (°F)', 'rgb(75, 192, 192)');
-     console.log("Charts initialized.");
-     liveStatusElement.textContent = "Charts ready, preparing connection...";
+     console.log("DEBUG: Temp monitor charts initialization attempted.");
+
+     // Start SSE connections after DOM is ready
+     connectTempMonitorSSE();
+     connectSumpMonitorSSE();
 });
 
 
-// --- Live Data Logic (SSE Connection) ---
-console.log("Dashboard script loaded.");
+// --- Function to Connect to Temp Monitor SSE ---
+function connectTempMonitorSSE() {
+    console.log("DEBUG: Initializing Temp Monitor connection.");
+    // Config check moved to DOMContentLoaded to ensure config.js has loaded
+    if (!TEMP_MONITOR_DEVICE_ID || TEMP_MONITOR_DEVICE_ID === "YOUR_FRIDGE_FREEZER_DEVICE_ID_HERE" || !TEMP_MONITOR_ACCESS_TOKEN || TEMP_MONITOR_ACCESS_TOKEN === "YOUR_FRIDGE_FREEZER_ACCESS_TOKEN_HERE") {
+         // This check might be redundant if the check in DOMContentLoaded works,
+         // but kept as a safeguard if connect function were called independently.
+         console.error("DEBUG: Temp Monitor Device ID or Access Token not set (checked in connect function).");
+         tempMonitorStatusElement.textContent = "Config Error!";
+         tempMonitorStatusElement.style.color = 'red';
+        return;
+    }
 
-if (!PARTICLE_DEVICE_ID || PARTICLE_DEVICE_ID === "YOUR_DEVICE_ID_HERE" || !PARTICLE_ACCESS_TOKEN || PARTICLE_ACCESS_TOKEN === "YOUR_PARTICLE_ACCESS_TOKEN_HERE") {
-    liveStatusElement.textContent = "Error: Device ID or Access Token not set in script.js!";
-    liveStatusElement.style.color = 'red';
-    console.error("Please set your PARTICLE_DEVICE_ID and PARTICLE_ACCESS_TOKEN in script.js");
-} else {
-    const sseUrl = `https://api.particle.io/v1/devices/${PARTICLE_DEVICE_ID}/events/${PARTICLE_EVENT_NAME}?access_token=${PARTICLE_ACCESS_TOKEN}`;
-
-    console.log(`Attempting to connect to Particle Stream at: ${sseUrl.replace(PARTICLE_ACCESS_TOKEN, 'ACCESS_TOKEN_HIDDEN')}`);
-    // Status set during chart initialization now
+    // Variables like TEMP_MONITOR_DEVICE_ID are now expected to be globally defined by config.js
+    const sseUrl = `https://api.particle.io/v1/devices/${TEMP_MONITOR_DEVICE_ID}/events/${TEMP_MONITOR_EVENT_NAME}?access_token=${TEMP_MONITOR_ACCESS_TOKEN}`;
+    console.log(`DEBUG: Attempting Temp Monitor SSE connection (Token Hidden)`);
+    tempMonitorStatusElement.textContent = "Connecting...";
+    tempMonitorStatusElement.style.color = '#555';
 
     const eventSource = new EventSource(sseUrl);
 
     eventSource.onopen = function() {
-        console.log("Connected to Particle Event Stream!");
-        liveStatusElement.textContent = "Connected";
-        liveStatusElement.style.color = 'green';
+        console.log("DEBUG: Temp Monitor SSE Connected!");
+        tempMonitorStatusElement.textContent = "Connected";
+        tempMonitorStatusElement.style.color = 'green';
     };
 
-    eventSource.addEventListener(PARTICLE_EVENT_NAME, function(event) {
+    eventSource.addEventListener(TEMP_MONITOR_EVENT_NAME, function(event) {
+        // console.log("DEBUG: Temp Monitor Event received raw data:", event.data);
         try {
             const particleEventData = JSON.parse(event.data);
             const jsonData = JSON.parse(particleEventData.data);
-            const timestamp = new Date(particleEventData.published_at); // Use the timestamp from the event
-
-            console.log("Parsed temperature data:", jsonData, "at", timestamp);
+            const timestamp = new Date(particleEventData.published_at);
 
             // --- Update Live Text Display ---
             if (jsonData.fridge !== undefined) liveFridgeElement.textContent = jsonData.fridge.toFixed(1);
             if (jsonData.freezer !== undefined) liveFreezerElement.textContent = jsonData.freezer.toFixed(1);
             if (jsonData.garage !== undefined) liveGarageElement.textContent = jsonData.garage.toFixed(1);
-            lastUpdatedElement.textContent = timestamp.toLocaleTimeString();
-            liveStatusElement.textContent = "Receiving data";
-            liveStatusElement.style.color = 'green';
+            tempMonitorLastUpdatedElement.textContent = timestamp.toLocaleTimeString();
+            tempMonitorStatusElement.textContent = "Receiving data";
+            tempMonitorStatusElement.style.color = 'green';
 
-            // --- Update Data History Arrays ---
+            // --- Update Data History & Charts ---
             timeHistory.push(timestamp);
             fridgeHistory.push(jsonData.fridge);
             freezerHistory.push(jsonData.freezer);
             garageHistory.push(jsonData.garage);
 
-            // --- Limit History Size ---
             if (timeHistory.length > MAX_HISTORY_POINTS) {
-                timeHistory.shift(); // Remove oldest timestamp
-                fridgeHistory.shift(); // Remove oldest fridge temp
-                freezerHistory.shift(); // Remove oldest freezer temp
-                garageHistory.shift(); // Remove oldest garage temp
+                timeHistory.shift(); fridgeHistory.shift(); freezerHistory.shift(); garageHistory.shift();
             }
 
-            // --- Update Charts ---
-            if (fridgeChartInstance) { // Check if chart is initialized
-                 fridgeChartInstance.data.labels = timeHistory;
-                 fridgeChartInstance.data.datasets[0].data = fridgeHistory;
-                 fridgeChartInstance.update();
-            }
-             if (freezerChartInstance) {
-                 freezerChartInstance.data.labels = timeHistory;
-                 freezerChartInstance.data.datasets[0].data = freezerHistory;
-                 freezerChartInstance.update();
-            }
-             if (garageChartInstance) {
-                 garageChartInstance.data.labels = timeHistory;
-                 garageChartInstance.data.datasets[0].data = garageHistory;
-                 garageChartInstance.update();
-            }
+            if (fridgeChartInstance) { fridgeChartInstance.data.labels = timeHistory; fridgeChartInstance.data.datasets[0].data = fridgeHistory; fridgeChartInstance.update(); }
+            if (freezerChartInstance) { freezerChartInstance.data.labels = timeHistory; freezerChartInstance.data.datasets[0].data = freezerHistory; freezerChartInstance.update(); }
+            if (garageChartInstance) { garageChartInstance.data.labels = timeHistory; garageChartInstance.data.datasets[0].data = garageHistory; garageChartInstance.update(); }
 
         } catch (error) {
-            console.error("Error processing event data:", error, "Raw data:", event.data);
-            liveStatusElement.textContent = "Data processing error";
-            liveStatusElement.style.color = 'orange';
+            console.error("DEBUG: Error processing Temp Monitor event data:", error, "Raw data:", event.data);
+            tempMonitorStatusElement.textContent = "Data Error";
+            tempMonitorStatusElement.style.color = 'orange';
         }
     }, false);
 
     eventSource.onerror = function(err) {
-        console.error("EventSource failed:", err);
-        if (err.target && err.target.readyState === EventSource.CLOSED) {
-            liveStatusElement.textContent = 'Connection Closed';
-            console.log('Connection was closed.');
-        } else {
-             liveStatusElement.textContent = "Connection error";
-        }
-        liveStatusElement.style.color = 'red';
+        console.error("DEBUG: Temp Monitor EventSource failed:", err);
+        tempMonitorStatusElement.textContent = (err.target && err.target.readyState === EventSource.CLOSED) ? 'Conn. Closed' : "Conn. Error";
+        tempMonitorStatusElement.style.color = 'red';
     };
 }
 
+
+// --- Function to Connect to Sump Monitor SSE ---
+function connectSumpMonitorSSE() {
+     console.log("DEBUG: Initializing Sump Monitor connection.");
+     // Config check moved to DOMContentLoaded
+     if (!SUMP_MONITOR_DEVICE_ID || SUMP_MONITOR_DEVICE_ID === "YOUR_SUMP_PUMP_DEVICE_ID_HERE" || !SUMP_MONITOR_ACCESS_TOKEN || SUMP_MONITOR_ACCESS_TOKEN === "YOUR_SUMP_PUMP_ACCESS_TOKEN_HERE") {
+        console.error("DEBUG: Sump Monitor Device ID or Access Token not set (checked in connect function).");
+        sumpMonitorStatusElement.textContent = "Config Error!";
+        sumpMonitorStatusElement.style.color = 'red';
+        return;
+    }
+
+    // Variables like SUMP_MONITOR_DEVICE_ID are now expected to be globally defined by config.js
+    const sseUrl = `https://api.particle.io/v1/devices/${SUMP_MONITOR_DEVICE_ID}/events/${SUMP_MONITOR_EVENT_NAME}?access_token=${SUMP_MONITOR_ACCESS_TOKEN}`;
+    console.log(`DEBUG: Attempting Sump Monitor SSE connection (Token Hidden)`);
+    sumpMonitorStatusElement.textContent = "Connecting...";
+     sumpMonitorStatusElement.style.color = '#555';
+
+    const eventSource = new EventSource(sseUrl);
+
+    eventSource.onopen = function() {
+        console.log("DEBUG: Sump Monitor SSE Connected!");
+        sumpMonitorStatusElement.textContent = "Connected";
+        sumpMonitorStatusElement.style.color = 'green';
+    };
+
+    eventSource.addEventListener(SUMP_MONITOR_EVENT_NAME, function(event) {
+         // console.log("DEBUG: Sump Monitor Event received raw data:", event.data);
+        try {
+            const particleEventData = JSON.parse(event.data);
+            const jsonData = JSON.parse(particleEventData.data);
+            const timestamp = new Date(particleEventData.published_at);
+
+            console.log("DEBUG: Parsed sump data:", jsonData);
+
+            // --- Update Live Text Display (Sump) ---
+            if (jsonData.temp !== undefined) sumpTempElement.textContent = jsonData.temp.toFixed(1);
+            if (jsonData.extPower !== undefined) sumpPowerElement.textContent = jsonData.extPower.toFixed(2);
+            if (jsonData.sumpRunTime !== undefined) sumpRuntimeElement.textContent = jsonData.sumpRunTime.toFixed(1); // Already in seconds
+            if (jsonData.timeSinceRun !== undefined) sumpSinceRunElement.textContent = jsonData.timeSinceRun.toFixed(1); // Already in minutes
+
+            sumpMonitorLastUpdatedElement.textContent = timestamp.toLocaleTimeString();
+            sumpMonitorStatusElement.textContent = "Receiving data";
+             sumpMonitorStatusElement.style.color = 'green';
+
+            // --- TODO: Add history arrays and chart updates for sump data if desired ---
+            // Example: sumpTempHistory.push(jsonData.temp); ... limit size ... sumpTempChartInstance.update();
+
+
+        } catch (error) {
+            console.error("DEBUG: Error processing Sump Monitor event data:", error, "Raw data:", event.data);
+            sumpMonitorStatusElement.textContent = "Data Error";
+             sumpMonitorStatusElement.style.color = 'orange';
+        }
+    }, false);
+
+     eventSource.onerror = function(err) {
+        console.error("DEBUG: Sump Monitor EventSource failed:", err);
+        sumpMonitorStatusElement.textContent = (err.target && err.target.readyState === EventSource.CLOSED) ? 'Conn. Closed' : "Conn. Error";
+        sumpMonitorStatusElement.style.color = 'red';
+    };
+}
+
+
 // --- Placeholder for Historical Data (Google Sheets) Logic ---
-// (Keep the placeholder comment for fetching long-term Google Sheets data)
+// This would need significant changes to potentially merge data from two sources
+// or display them separately based on Sheet structure.
 /*
 const GOOGLE_APPS_SCRIPT_URL = 'YOUR_APPS_SCRIPT_WEB_APP_URL'; // Replace!
 fetch(GOOGLE_APPS_SCRIPT_URL) ...
