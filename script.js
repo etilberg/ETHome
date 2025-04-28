@@ -47,18 +47,54 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
         return null;
     }
     console.log(`DEBUG: Creating chart for canvas ID '${canvasId}'`);
-    return new Chart(ctx, {
-        type: 'line',
-        data: { labels: [], datasets: [{ label: label, data: [], borderColor: borderColor, borderWidth: 2, fill: false, tension: 0.1 }] },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            scales: {
-                x: { type: 'time', time: { unit: 'minute', tooltipFormat: 'h:mm a', displayFormats: { minute: 'h:mm a' } }, title: { display: true, text: 'Time' } },
-                y: { beginAtZero: false, title: { display: true, text: yLabel } }
+return new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [{
+            label: label,
+            data: [],
+            borderColor: borderColor,
+            borderWidth: 2,
+            fill: false,
+            tension: 0.1
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            x: {
+                type: 'time',
+                time: {
+                    tooltipFormat: 'h:mm a',
+                    displayFormats: {
+                        minute: 'h:mm a',   // If zoomed in to minutes
+                        hour: 'h a',        // If zoomed out to hours
+                        day: 'MMM d'        // If zoomed WAY out (like over days)
+                    }
+                },
+                title: {
+                    display: true,
+                    text: 'Time'
+                }
             },
-            plugins: { legend: { display: true } }
+            y: {
+                beginAtZero: false,
+                title: {
+                    display: true,
+                    text: yLabel
+                }
+            }
+        },
+        plugins: {
+            legend: {
+                display: true
+            }
         }
-    });
+    }
+});
+
 }
 
 // Initialize charts once the DOM is ready
