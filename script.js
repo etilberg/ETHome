@@ -25,9 +25,15 @@ let timeHistory = [];
 let fridgeHistory = [];
 let freezerHistory = [];
 let garageHistory = [];
+let sumpTimeHistory = [];
+let sumpTempHistory = [];
+let sumpPowerHistory = [];
+let sumpRuntimeHistory = [];
+let sumpSinceRunHistory = [];
 
 // --- Chart Initialization (Temp Monitor Only for now) ---
 let fridgeChartInstance, freezerChartInstance, garageChartInstance;
+let sumpTempChartInstance, sumpPowerChartInstance, sumpRuntimeChartInstance, sumpSinceRunChartInstance;
 
 function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)') {
     const canvasElement = document.getElementById(canvasId);
@@ -72,6 +78,11 @@ document.addEventListener('DOMContentLoaded', () => {
      fridgeChartInstance = createChart('fridgeChart', 'Fridge Temp (°F)', 'rgb(255, 99, 132)');
      freezerChartInstance = createChart('freezerChart', 'Freezer Temp (°F)', 'rgb(54, 162, 235)');
      garageChartInstance = createChart('garageChart', 'Garage Temp (°F)', 'rgb(75, 192, 192)');
+     sumpTempChartInstance = createChart('sumpTempChart', 'Sump Temperature (°F)', 'rgb(255, 206, 86)');
+     sumpPowerChartInstance = createChart('sumpPowerChart', 'External Power (V)', 'rgb(153, 102, 255)', 'Voltage (V)');
+     sumpRuntimeChartInstance = createChart('sumpRuntimeChart', 'Sump Runtime (sec)', 'rgb(255, 159, 64)', 'Runtime (seconds)');
+     sumpSinceRunChartInstance = createChart('sumpSinceRunChart', 'Time Since Last Run (min)', 'rgb(201, 203, 207)', 'Minutes');
+
      console.log("DEBUG: Temp monitor charts initialization attempted.");
 
      // Start SSE connections after DOM is ready
@@ -195,8 +206,39 @@ function connectSumpMonitorSSE() {
             sumpMonitorStatusElement.textContent = "Receiving data";
              sumpMonitorStatusElement.style.color = 'green';
 
-            // --- TODO: Add history arrays and chart updates for sump data if desired ---
-            // Example: sumpTempHistory.push(jsonData.temp); ... limit size ... sumpTempChartInstance.update();
+            // --- Update Data History & Charts for Sump ---
+            sumpTimeHistory.push(timestamp);
+            sumpTempHistory.push(jsonData.temp);
+            sumpPowerHistory.push(jsonData.extPower);
+            sumpRuntimeHistory.push(jsonData.sumpRunTime);
+            sumpSinceRunHistory.push(jsonData.timeSinceRun);
+            
+            // Keep arrays trimmed
+            if (sumpTimeHistory.length > MAX_HISTORY_POINTS) {
+                sumpTimeHistory.shift(); sumpTempHistory.shift(); sumpPowerHistory.shift(); sumpRuntimeHistory.shift(); sumpSinceRunHistory.shift();
+            }
+            
+            // Update each chart if it exists
+            if (sumpTempChartInstance) {
+                sumpTempChartInstance.data.labels = sumpTimeHistory;
+                sumpTempChartInstance.data.datasets[0].data = sumpTempHistory;
+                sumpTempChartInstance.update();
+            }
+            if (sumpPowerChartInstance) {
+                sumpPowerChartInstance.data.labels = sumpTimeHistory;
+                sumpPowerChartInstance.data.datasets[0].data = sumpPowerHistory;
+                sumpPowerChartInstance.update();
+            }
+            if (sumpRuntimeChartInstance) {
+                sumpRuntimeChartInstance.data.labels = sumpTimeHistory;
+                sumpRuntimeChartInstance.data.datasets[0].data = sumpRuntimeHistory;
+                sumpRuntimeChartInstance.update();
+            }
+            if (sumpSinceRunChartInstance) {
+                sumpSinceRunChartInstance.data.labels = sumpTimeHistory;
+                sumpSinceRunChartInstance.data.datasets[0].data = sumpSinceRunHistory;
+                sumpSinceRunChartInstance.update();
+            }
 
 
         } catch (error) {
