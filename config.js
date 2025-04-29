@@ -17,6 +17,9 @@ const SUMP_MONITOR_ACCESS_TOKEN = "28f3c69720f69b2ffbdcdd0534b67f49e4f1030e"; //
 const TEMP_MONITOR_EVENT_NAME = "currentTemps";
 const SUMP_MONITOR_EVENT_NAME = "sumpData";
 const MAX_HISTORY_POINTS = 60; // History for Fridge/Freezer charts
+// config.js (Add this line)
+const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxKxmWEQoH-ySHfKdUDdexiV086AjTS1WMkJfBoxm4JtRiqZz_VQ5d8mCsuLvn3NB0t/exec"; // <--- REPLACE
+
 
 // --- End of Configuration ---
 console.log("DEBUG: config.js loaded.");
