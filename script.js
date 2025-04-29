@@ -124,6 +124,9 @@ document.addEventListener('DOMContentLoaded', () => {
      // Start SSE connections after DOM is ready
      connectTempMonitorSSE();
      connectSumpMonitorSSE();
+
+     // Fetch historical data
+     fetchHistoricalData(); // <<< CALL THE NEW FUNCTION HERE
 });
 
 
@@ -291,11 +294,53 @@ function connectSumpMonitorSSE() {
     };
 }
 
+// --- Function to Fetch Historical Data ---
+function fetchHistoricalData() {
+    console.log("DEBUG: Attempting to fetch historical data from Google Sheets via Apps Script...");
+    const historicalContainer = document.getElementById('historical-chart-container-gsheets'); // Get the placeholder div
 
-// --- Placeholder for Historical Data (Google Sheets) Logic ---
-// This would need significant changes to potentially merge data from two sources
-// or display them separately based on Sheet structure.
-/*
-const GOOGLE_APPS_SCRIPT_URL = 'YOUR_APPS_SCRIPT_WEB_APP_URL'; // Replace!
-fetch(GOOGLE_APPS_SCRIPT_URL) ...
-*/
+    if (!GOOGLE_APPS_SCRIPT_URL || GOOGLE_APPS_SCRIPT_URL === "PASTE_YOUR_WEB_APP_URL_HERE") {
+        console.error("DEBUG: GOOGLE_APPS_SCRIPT_URL is not defined in config.js!");
+        historicalContainer.textContent = "Error: Google Apps Script URL not configured.";
+        return;
+    }
+
+    historicalContainer.textContent = "Loading historical data..."; // Update status
+
+    fetch(GOOGLE_APPS_SCRIPT_URL)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(result => {
+            if (result.error) {
+               throw new Error(`Apps Script Error: ${result.error} ${result.details || ''}`);
+            }
+
+            console.log("DEBUG: Received historical data:", result.data);
+            historicalContainer.textContent = `Successfully loaded ${result.data.length} historical records.`; // Simple confirmation
+
+            // --- TODO: Process and Display Historical Data ---
+            // Here you would:
+            // 1. Process the 'result.data' array. Each element is an object
+            //    like { timestamp: ..., fridgeTemp: ..., freezerTemp: ..., ... }
+            // 2. You might want to create separate arrays for each metric's history.
+            // 3. Use Chart.js (or another method) to display this data.
+            //    You could create new charts specifically for the historical data,
+            //    potentially in the 'historical-chart-container-gsheets' div
+            //    or dedicated canvas elements if you add them to index.html.
+            // Example: Display first record timestamp
+            // if(result.data.length > 0) {
+            //    historicalContainer.textContent += ` First record timestamp: ${result.data[0].timestamp}`;
+            // }
+            // --- End TODO ---
+
+        })
+        .catch(error => {
+            console.error('DEBUG: Error fetching or processing historical data:', error);
+            historicalContainer.textContent = `Error loading historical data: ${error.message}`;
+            historicalContainer.style.color = 'orange';
+        });
+}
