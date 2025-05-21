@@ -127,6 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
      connectTempMonitorSSE();
      connectSumpMonitorSSE();
+     fetchHistoricalDataFromSheets();
 });
 
 
@@ -284,3 +285,62 @@ function connectSumpMonitorSSE() {
 const GOOGLE_APPS_SCRIPT_URL = 'YOUR_APPS_SCRIPT_WEB_APP_URL'; // From config.js
 function fetchHistoricalData() { ... }
 */
+function fetchHistoricalDataFromSheets() {
+    if (!GOOGLE_APPS_SCRIPT_URL) {
+        console.error("DEBUG: Google Apps Script URL not set.");
+        return;
+    }
+
+    fetch(GOOGLE_APPS_SCRIPT_URL)
+        .then(response => response.json())
+        .then(data => {
+            console.log("DEBUG: Historical data received:", data);
+
+            data.forEach(row => {
+                const timestamp = new Date(row.timestamp);
+                timeHistory.push(timestamp);
+                fridgeHistory.push(parseFloat(row.fridge));
+                freezerHistory.push(parseFloat(row.freezer));
+                garageHistory.push(parseFloat(row.garage));
+            });
+
+            // Trim arrays to MAX_HISTORY_POINTS
+            if (timeHistory.length > MAX_HISTORY_POINTS) {
+                const excess = timeHistory.length - MAX_HISTORY_POINTS;
+                timeHistory.splice(0, excess);
+                fridgeHistory.splice(0, excess);
+                freezerHistory.splice(0, excess);
+                garageHistory.splice(0, excess);
+            }
+
+            // Update charts
+            if (fridgeChartInstance) {
+                fridgeChartInstance.data.labels = timeHistory;
+                fridgeChartInstance.data.datasets[0].data = fridgeHistory;
+                fridgeChartInstance.update();
+            }
+            if (freezerChartInstance) {
+                freezerChartInstance.data.labels = timeHistory;
+                freezerChartInstance.data.datasets[0].data = freezerHistory;
+                freezerChartInstance.update();
+            }
+            if (garageChartInstance) {
+                garageChartInstance.data.labels = timeHistory;
+                garageChartInstance.data.datasets[0].data = garageHistory;
+                garageChartInstance.update();
+            }
+
+            // Update UI
+            const gsheetsContainer = document.getElementById('historical-chart-container-gsheets');
+            if (gsheetsContainer) {
+                gsheetsContainer.textContent = "Historical data loaded into charts.";
+            }
+        })
+        .catch(error => {
+            console.error("DEBUG: Failed to fetch historical data:", error);
+            const gsheetsContainer = document.getElementById('historical-chart-container-gsheets');
+            if (gsheetsContainer) {
+                gsheetsContainer.textContent = "Failed to load historical data.";
+            }
+        });
+}
