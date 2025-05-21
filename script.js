@@ -281,31 +281,23 @@ function connectSumpMonitorSSE() {
     };
 }
 
-// --- Placeholder for Historical Data (Google Sheets) Logic ---
-/*
-const GOOGLE_APPS_SCRIPT_URL = 'YOUR_APPS_SCRIPT_WEB_APP_URL'; // From config.js
-function fetchHistoricalData() { ... }
-*/
 function fetchHistoricalDataFromSheets() {
-    if (!GOOGLE_APPS_SCRIPT_URL) {
-        console.error("DEBUG: Google Apps Script URL not set.");
-        return;
-    }
+    const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRph0sdeOMbpa_5nOIC36yVgte5zWbxEXCVy6GMzB6ehhkV49_M_KMJAMx2HHM8XAi9hN2KvO83aR9b/pub?gid=0&single=true&output=csv';
 
-    fetch(GOOGLE_APPS_SCRIPT_URL)
-        .then(response => response.json())
-        .then(data => {
-            console.log("DEBUG: Historical data received:", data);
-
-            data.forEach(row => {
-                const timestamp = new Date(row.timestamp);
-                timeHistory.push(timestamp);
-                fridgeHistory.push(parseFloat(row.fridge));
-                freezerHistory.push(parseFloat(row.freezer));
-                garageHistory.push(parseFloat(row.garage));
+    fetch(CSV_URL)
+        .then(response => response.text())
+        .then(csv => {
+            const lines = csv.split('\n').slice(1); // skip header
+            lines.forEach(line => {
+                const [timestamp, fridge, freezer, garage] = line.split(',');
+                const ts = new Date(timestamp);
+                timeHistory.push(ts);
+                fridgeHistory.push(parseFloat(fridge));
+                freezerHistory.push(parseFloat(freezer));
+                garageHistory.push(parseFloat(garage));
             });
 
-            // Trim arrays to MAX_HISTORY_POINTS
+            // Trim
             if (timeHistory.length > MAX_HISTORY_POINTS) {
                 const excess = timeHistory.length - MAX_HISTORY_POINTS;
                 timeHistory.splice(0, excess);
@@ -314,7 +306,6 @@ function fetchHistoricalDataFromSheets() {
                 garageHistory.splice(0, excess);
             }
 
-            // Update charts
             if (fridgeChartInstance) {
                 fridgeChartInstance.data.labels = timeHistory;
                 fridgeChartInstance.data.datasets[0].data = fridgeHistory;
@@ -331,17 +322,10 @@ function fetchHistoricalDataFromSheets() {
                 garageChartInstance.update();
             }
 
-            // Update UI
-            const gsheetsContainer = document.getElementById('historical-chart-container-gsheets');
-            if (gsheetsContainer) {
-                gsheetsContainer.textContent = "Historical data loaded into charts.";
-            }
+            document.getElementById('historical-chart-container-gsheets').textContent = "Historical data loaded.";
         })
         .catch(error => {
-            console.error("DEBUG: Failed to fetch historical data:", error);
-            const gsheetsContainer = document.getElementById('historical-chart-container-gsheets');
-            if (gsheetsContainer) {
-                gsheetsContainer.textContent = "Failed to load historical data.";
-            }
+            console.error("Failed to load CSV data:", error);
+            document.getElementById('historical-chart-container-gsheets').textContent = "Failed to load historical data.";
         });
 }
