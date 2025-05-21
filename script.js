@@ -125,9 +125,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
      console.log("DEBUG: Charts initialization attempted.");
 
+    fetchHistoricalDataFromSheets();
      connectTempMonitorSSE();
      connectSumpMonitorSSE();
-     fetchHistoricalDataFromSheets();
+
 });
 
 
