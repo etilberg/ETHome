@@ -12,6 +12,10 @@ const liveFridgeElement = document.getElementById('live-fridge');
 const liveFreezerElement = document.getElementById('live-freezer');
 const liveGarageElement = document.getElementById('live-garage');
 const tempMonitorLastUpdatedElement = document.getElementById('temp-monitor-last-updated');
+// New Temp Monitor Heater Elements
+const liveHeaterValueElement = document.getElementById('live-heater-value');
+const liveHeaterStatusElement = document.getElementById('live-heater-status');
+
 // Sump Monitor Elements
 const sumpMonitorStatusElement = document.getElementById('sump-monitor-status');
 const sumpTempElement = document.getElementById('sump-temp');
@@ -20,18 +24,20 @@ const sumpRuntimeElement = document.getElementById('sump-runtime');
 const sumpSinceRunElement = document.getElementById('sump-since-run');
 const sumpMonitorLastUpdatedElement = document.getElementById('sump-monitor-last-updated');
 
-// --- Data Storage (Temp Monitor Only for now) ---
+// --- Data Storage ---
 let timeHistory = [];
 let fridgeHistory = [];
 let freezerHistory = [];
 let garageHistory = [];
+// Note: No history/charting for heater values added yet, just display.
+
 let sumpTimeHistory = [];
 let sumpTempHistory = [];
 let sumpPowerHistory = [];
 let sumpRuntimeHistory = [];
 let sumpSinceRunHistory = [];
 
-// --- Chart Initialization (Temp Monitor Only for now) ---
+// --- Chart Initialization ---
 let fridgeChartInstance, freezerChartInstance, garageChartInstance;
 let sumpTempChartInstance, sumpPowerChartInstance, sumpRuntimeChartInstance, sumpSinceRunChartInstance;
 
@@ -69,9 +75,9 @@ return new Chart(ctx, {
                 time: {
                     tooltipFormat: 'h:mm a',
                     displayFormats: {
-                        minute: 'h:mm a',   // If zoomed in to minutes
-                        hour: 'h a',        // If zoomed out to hours
-                        day: 'MMM d'        // If zoomed WAY out (like over days)
+                        minute: 'h:mm a',
+                        hour: 'h a',
+                        day: 'MMM d'
                     }
                 },
                 title: {
@@ -100,15 +106,13 @@ return new Chart(ctx, {
 // Initialize charts once the DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
      console.log("DEBUG: DOM loaded, initializing charts.");
-     // Ensure config variables are loaded before trying to use them here or in connect functions
      if (typeof TEMP_MONITOR_DEVICE_ID === 'undefined') {
          console.error("DEBUG: Configuration variables from config.js seem to be missing!");
-         // Display an error to the user?
          tempMonitorStatusElement.textContent = "Config Error!";
          tempMonitorStatusElement.style.color = 'red';
          sumpMonitorStatusElement.textContent = "Config Error!";
          sumpMonitorStatusElement.style.color = 'red';
-         return; // Stop further execution if config is missing
+         return;
      }
 
      fridgeChartInstance = createChart('fridgeChart', 'Fridge Temp (°F)', 'rgb(255, 99, 132)');
@@ -119,31 +123,23 @@ document.addEventListener('DOMContentLoaded', () => {
      sumpRuntimeChartInstance = createChart('sumpRuntimeChart', 'Sump Runtime (sec)', 'rgb(255, 159, 64)', 'Runtime (seconds)');
      sumpSinceRunChartInstance = createChart('sumpSinceRunChart', 'Time Since Last Run (min)', 'rgb(201, 203, 207)', 'Minutes');
 
-     console.log("DEBUG: Temp monitor charts initialization attempted.");
+     console.log("DEBUG: Charts initialization attempted.");
 
-     // Start SSE connections after DOM is ready
      connectTempMonitorSSE();
      connectSumpMonitorSSE();
-
-     // Fetch historical data
-     fetchHistoricalData(); // <<< CALL THE NEW FUNCTION HERE
 });
 
 
 // --- Function to Connect to Temp Monitor SSE ---
 function connectTempMonitorSSE() {
     console.log("DEBUG: Initializing Temp Monitor connection.");
-    // Config check moved to DOMContentLoaded to ensure config.js has loaded
     if (!TEMP_MONITOR_DEVICE_ID || TEMP_MONITOR_DEVICE_ID === "YOUR_FRIDGE_FREEZER_DEVICE_ID_HERE" || !TEMP_MONITOR_ACCESS_TOKEN || TEMP_MONITOR_ACCESS_TOKEN === "YOUR_FRIDGE_FREEZER_ACCESS_TOKEN_HERE") {
-         // This check might be redundant if the check in DOMContentLoaded works,
-         // but kept as a safeguard if connect function were called independently.
          console.error("DEBUG: Temp Monitor Device ID or Access Token not set (checked in connect function).");
          tempMonitorStatusElement.textContent = "Config Error!";
          tempMonitorStatusElement.style.color = 'red';
         return;
     }
 
-    // Variables like TEMP_MONITOR_DEVICE_ID are now expected to be globally defined by config.js
     const sseUrl = `https://api.particle.io/v1/devices/${TEMP_MONITOR_DEVICE_ID}/events/${TEMP_MONITOR_EVENT_NAME}?access_token=${TEMP_MONITOR_ACCESS_TOKEN}`;
     console.log(`DEBUG: Attempting Temp Monitor SSE connection (Token Hidden)`);
     tempMonitorStatusElement.textContent = "Connecting...";
@@ -158,21 +154,32 @@ function connectTempMonitorSSE() {
     };
 
     eventSource.addEventListener(TEMP_MONITOR_EVENT_NAME, function(event) {
-        // console.log("DEBUG: Temp Monitor Event received raw data:", event.data);
         try {
             const particleEventData = JSON.parse(event.data);
-            const jsonData = JSON.parse(particleEventData.data);
+            const jsonData = JSON.parse(particleEventData.data); // This is your {"garage":..., "freezer":..., etc}
             const timestamp = new Date(particleEventData.published_at);
+
+            console.log("DEBUG: Temp Monitor data received:", jsonData); // Log the received data
 
             // --- Update Live Text Display ---
             if (jsonData.fridge !== undefined) liveFridgeElement.textContent = jsonData.fridge.toFixed(1);
             if (jsonData.freezer !== undefined) liveFreezerElement.textContent = jsonData.freezer.toFixed(1);
             if (jsonData.garage !== undefined) liveGarageElement.textContent = jsonData.garage.toFixed(1);
+            
+            // --- Update New Heater Display Elements ---
+            if (jsonData.heater !== undefined && liveHeaterValueElement) {
+                liveHeaterValueElement.textContent = jsonData.heater.toFixed(2); // Assuming it's a numeric value
+            }
+            if (jsonData.heateron !== undefined && liveHeaterStatusElement) {
+                liveHeaterStatusElement.textContent = (jsonData.heateron === 1 || jsonData.heateron === "1") ? "On" : "Off";
+            }
+            // --- End New Heater Display ---
+
             tempMonitorLastUpdatedElement.textContent = timestamp.toLocaleTimeString();
             tempMonitorStatusElement.textContent = "Receiving data";
             tempMonitorStatusElement.style.color = 'green';
 
-            // --- Update Data History & Charts ---
+            // --- Update Data History & Charts (existing fridge/freezer/garage charts) ---
             timeHistory.push(timestamp);
             fridgeHistory.push(jsonData.fridge);
             freezerHistory.push(jsonData.freezer);
@@ -204,7 +211,6 @@ function connectTempMonitorSSE() {
 // --- Function to Connect to Sump Monitor SSE ---
 function connectSumpMonitorSSE() {
      console.log("DEBUG: Initializing Sump Monitor connection.");
-     // Config check moved to DOMContentLoaded
      if (!SUMP_MONITOR_DEVICE_ID || SUMP_MONITOR_DEVICE_ID === "YOUR_SUMP_PUMP_DEVICE_ID_HERE" || !SUMP_MONITOR_ACCESS_TOKEN || SUMP_MONITOR_ACCESS_TOKEN === "YOUR_SUMP_PUMP_ACCESS_TOKEN_HERE") {
         console.error("DEBUG: Sump Monitor Device ID or Access Token not set (checked in connect function).");
         sumpMonitorStatusElement.textContent = "Config Error!";
@@ -212,7 +218,6 @@ function connectSumpMonitorSSE() {
         return;
     }
 
-    // Variables like SUMP_MONITOR_DEVICE_ID are now expected to be globally defined by config.js
     const sseUrl = `https://api.particle.io/v1/devices/${SUMP_MONITOR_DEVICE_ID}/events/${SUMP_MONITOR_EVENT_NAME}?access_token=${SUMP_MONITOR_ACCESS_TOKEN}`;
     console.log(`DEBUG: Attempting Sump Monitor SSE connection (Token Hidden)`);
     sumpMonitorStatusElement.textContent = "Connecting...";
@@ -227,7 +232,6 @@ function connectSumpMonitorSSE() {
     };
 
     eventSource.addEventListener(SUMP_MONITOR_EVENT_NAME, function(event) {
-         // console.log("DEBUG: Sump Monitor Event received raw data:", event.data);
         try {
             const particleEventData = JSON.parse(event.data);
             const jsonData = JSON.parse(particleEventData.data);
@@ -238,12 +242,12 @@ function connectSumpMonitorSSE() {
             // --- Update Live Text Display (Sump) ---
             if (jsonData.temp !== undefined) sumpTempElement.textContent = jsonData.temp.toFixed(1);
             if (jsonData.extPower !== undefined) sumpPowerElement.textContent = jsonData.extPower.toFixed(2);
-            if (jsonData.sumpRunTime !== undefined) sumpRuntimeElement.textContent = jsonData.sumpRunTime.toFixed(1); // Already in seconds
-            if (jsonData.timeSinceRun !== undefined) sumpSinceRunElement.textContent = jsonData.timeSinceRun.toFixed(1); // Already in minutes
+            if (jsonData.sumpRunTime !== undefined) sumpRuntimeElement.textContent = jsonData.sumpRunTime.toFixed(1);
+            if (jsonData.timeSinceRun !== undefined) sumpSinceRunElement.textContent = jsonData.timeSinceRun.toFixed(1);
 
             sumpMonitorLastUpdatedElement.textContent = timestamp.toLocaleTimeString();
             sumpMonitorStatusElement.textContent = "Receiving data";
-             sumpMonitorStatusElement.style.color = 'green';
+            sumpMonitorStatusElement.style.color = 'green';
 
             // --- Update Data History & Charts for Sump ---
             sumpTimeHistory.push(timestamp);
@@ -252,38 +256,19 @@ function connectSumpMonitorSSE() {
             sumpRuntimeHistory.push(jsonData.sumpRunTime);
             sumpSinceRunHistory.push(jsonData.timeSinceRun);
             
-            // Keep arrays trimmed
             if (sumpTimeHistory.length > MAX_HISTORY_POINTS) {
                 sumpTimeHistory.shift(); sumpTempHistory.shift(); sumpPowerHistory.shift(); sumpRuntimeHistory.shift(); sumpSinceRunHistory.shift();
             }
             
-            // Update each chart if it exists
-            if (sumpTempChartInstance) {
-                sumpTempChartInstance.data.labels = sumpTimeHistory;
-                sumpTempChartInstance.data.datasets[0].data = sumpTempHistory;
-                sumpTempChartInstance.update();
-            }
-            if (sumpPowerChartInstance) {
-                sumpPowerChartInstance.data.labels = sumpTimeHistory;
-                sumpPowerChartInstance.data.datasets[0].data = sumpPowerHistory;
-                sumpPowerChartInstance.update();
-            }
-            if (sumpRuntimeChartInstance) {
-                sumpRuntimeChartInstance.data.labels = sumpTimeHistory;
-                sumpRuntimeChartInstance.data.datasets[0].data = sumpRuntimeHistory;
-                sumpRuntimeChartInstance.update();
-            }
-            if (sumpSinceRunChartInstance) {
-                sumpSinceRunChartInstance.data.labels = sumpTimeHistory;
-                sumpSinceRunChartInstance.data.datasets[0].data = sumpSinceRunHistory;
-                sumpSinceRunChartInstance.update();
-            }
-
+            if (sumpTempChartInstance) { sumpTempChartInstance.data.labels = sumpTimeHistory; sumpTempChartInstance.data.datasets[0].data = sumpTempHistory; sumpTempChartInstance.update(); }
+            if (sumpPowerChartInstance) { sumpPowerChartInstance.data.labels = sumpTimeHistory; sumpPowerChartInstance.data.datasets[0].data = sumpPowerHistory; sumpPowerChartInstance.update(); }
+            if (sumpRuntimeChartInstance) { sumpRuntimeChartInstance.data.labels = sumpTimeHistory; sumpRuntimeChartInstance.data.datasets[0].data = sumpRuntimeHistory; sumpRuntimeChartInstance.update(); }
+            if (sumpSinceRunChartInstance) { sumpSinceRunChartInstance.data.labels = sumpTimeHistory; sumpSinceRunChartInstance.data.datasets[0].data = sumpSinceRunHistory; sumpSinceRunChartInstance.update(); }
 
         } catch (error) {
             console.error("DEBUG: Error processing Sump Monitor event data:", error, "Raw data:", event.data);
             sumpMonitorStatusElement.textContent = "Data Error";
-             sumpMonitorStatusElement.style.color = 'orange';
+            sumpMonitorStatusElement.style.color = 'orange';
         }
     }, false);
 
@@ -294,53 +279,8 @@ function connectSumpMonitorSSE() {
     };
 }
 
-// --- Function to Fetch Historical Data ---
-function fetchHistoricalData() {
-    console.log("DEBUG: Attempting to fetch historical data from Google Sheets via Apps Script...");
-    const historicalContainer = document.getElementById('historical-chart-container-gsheets'); // Get the placeholder div
-
-    if (!GOOGLE_APPS_SCRIPT_URL || GOOGLE_APPS_SCRIPT_URL === "PASTE_YOUR_WEB_APP_URL_HERE") {
-        console.error("DEBUG: GOOGLE_APPS_SCRIPT_URL is not defined in config.js!");
-        historicalContainer.textContent = "Error: Google Apps Script URL not configured.";
-        return;
-    }
-
-    historicalContainer.textContent = "Loading historical data..."; // Update status
-
-    fetch(GOOGLE_APPS_SCRIPT_URL)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(result => {
-            if (result.error) {
-               throw new Error(`Apps Script Error: ${result.error} ${result.details || ''}`);
-            }
-
-            console.log("DEBUG: Received historical data:", result.data);
-            historicalContainer.textContent = `Successfully loaded ${result.data.length} historical records.`; // Simple confirmation
-
-            // --- TODO: Process and Display Historical Data ---
-            // Here you would:
-            // 1. Process the 'result.data' array. Each element is an object
-            //    like { timestamp: ..., fridgeTemp: ..., freezerTemp: ..., ... }
-            // 2. You might want to create separate arrays for each metric's history.
-            // 3. Use Chart.js (or another method) to display this data.
-            //    You could create new charts specifically for the historical data,
-            //    potentially in the 'historical-chart-container-gsheets' div
-            //    or dedicated canvas elements if you add them to index.html.
-            // Example: Display first record timestamp
-            // if(result.data.length > 0) {
-            //    historicalContainer.textContent += ` First record timestamp: ${result.data[0].timestamp}`;
-            // }
-            // --- End TODO ---
-
-        })
-        .catch(error => {
-            console.error('DEBUG: Error fetching or processing historical data:', error);
-            historicalContainer.textContent = `Error loading historical data: ${error.message}`;
-            historicalContainer.style.color = 'orange';
-        });
-}
+// --- Placeholder for Historical Data (Google Sheets) Logic ---
+/*
+const GOOGLE_APPS_SCRIPT_URL = 'YOUR_APPS_SCRIPT_WEB_APP_URL'; // From config.js
+function fetchHistoricalData() { ... }
+*/
