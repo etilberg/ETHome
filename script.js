@@ -290,11 +290,8 @@ function fetchHistoricalDataFromSheets() {
             const lines = csv.split('\n').slice(1); // skip header
             lines.forEach(line => {
                 const [timestamp, garage, freezer, fridge] = line.split(',');
-                //const ts = new Date(timestamp);
-                //timeHistory.push(ts);
-                const localTimestamp = new Date(timestamp);
-                const correctedTimestamp = new Date(localTimestamp.getTime() + localTimestamp.getTimezoneOffset() * 60000);
-                timeHistory.push(correctedTimestamp);
+                const ts = new Date(timestamp);
+                timeHistory.push(ts);
                 fridgeHistory.push(parseFloat(fridge));
                 freezerHistory.push(parseFloat(freezer));
                 garageHistory.push(parseFloat(garage));
