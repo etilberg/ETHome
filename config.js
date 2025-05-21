@@ -18,7 +18,7 @@ const TEMP_MONITOR_EVENT_NAME = "GarageWebHook";
 const SUMP_MONITOR_EVENT_NAME = "sumpData";
 const MAX_HISTORY_POINTS = 60; // History for Fridge/Freezer charts
 // config.js (Add this line)
-const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyL4jYfm4xt_sM6C8hWB3DvAAyjmiAgGTs-VphvnSlPj2v-ImzFkUt0NEGshVwKnLpRHA/exec';
+const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyInmR24-KePk5B61OqiCAEbm6ZkMKqDdK3Hb8EPxvjaj8AWS1OOxoLaHlXHMjbFF0AIQ/exec';
 
 
 // --- End of Configuration ---
