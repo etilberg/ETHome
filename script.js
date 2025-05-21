@@ -156,34 +156,43 @@ function connectTempMonitorSSE() {
     eventSource.addEventListener(TEMP_MONITOR_EVENT_NAME, function(event) {
         try {
             const particleEventData = JSON.parse(event.data);
-            const jsonData = JSON.parse(particleEventData.data); // This is your {"garage":..., "freezer":..., etc}
+            const jsonData = JSON.parse(particleEventData.data); // This should be your new JSON
             const timestamp = new Date(particleEventData.published_at);
 
-            console.log("DEBUG: Temp Monitor data received:", jsonData); // Log the received data
+            console.log("DEBUG: Temp Monitor data received:", jsonData);
 
-            // --- Update Live Text Display ---
-            if (jsonData.fridge !== undefined) liveFridgeElement.textContent = jsonData.fridge.toFixed(1);
-            if (jsonData.freezer !== undefined) liveFreezerElement.textContent = jsonData.freezer.toFixed(1);
-            if (jsonData.garage !== undefined) liveGarageElement.textContent = jsonData.garage.toFixed(1);
+            // --- Update Live Text Display (using confirmed keys) ---
+            if (jsonData.fridge !== undefined) {
+                liveFridgeElement.textContent = jsonData.fridge.toFixed(1);
+            } else { liveFridgeElement.textContent = "--"; }
+
+            if (jsonData.freezer !== undefined) {
+                liveFreezerElement.textContent = jsonData.freezer.toFixed(1);
+            } else { liveFreezerElement.textContent = "--"; }
+
+            if (jsonData.garage !== undefined) {
+                liveGarageElement.textContent = jsonData.garage.toFixed(1);
+            } else { liveGarageElement.textContent = "--"; }
             
-            // --- Update New Heater Display Elements ---
+            // --- Update Heater Display Elements (using confirmed keys) ---
             if (jsonData.heater !== undefined && liveHeaterValueElement) {
-                liveHeaterValueElement.textContent = jsonData.heater.toFixed(2); // Assuming it's a numeric value
-            }
+                liveHeaterValueElement.textContent = jsonData.heater.toFixed(2);
+            } else if (liveHeaterValueElement) { liveHeaterValueElement.textContent = "--"; }
+
             if (jsonData.heateron !== undefined && liveHeaterStatusElement) {
                 liveHeaterStatusElement.textContent = (jsonData.heateron === 1 || jsonData.heateron === "1") ? "On" : "Off";
-            }
-            // --- End New Heater Display ---
+            } else if (liveHeaterStatusElement) { liveHeaterStatusElement.textContent = "--"; }
+            // --- End Heater Display ---
 
             tempMonitorLastUpdatedElement.textContent = timestamp.toLocaleTimeString();
             tempMonitorStatusElement.textContent = "Receiving data";
             tempMonitorStatusElement.style.color = 'green';
 
-            // --- Update Data History & Charts (existing fridge/freezer/garage charts) ---
+            // --- Update Data History & Charts (using confirmed keys) ---
             timeHistory.push(timestamp);
-            fridgeHistory.push(jsonData.fridge);
-            freezerHistory.push(jsonData.freezer);
-            garageHistory.push(jsonData.garage);
+            fridgeHistory.push(jsonData.fridge !== undefined ? jsonData.fridge : null);
+            freezerHistory.push(jsonData.freezer !== undefined ? jsonData.freezer : null);
+            garageHistory.push(jsonData.garage !== undefined ? jsonData.garage : null);
 
             if (timeHistory.length > MAX_HISTORY_POINTS) {
                 timeHistory.shift(); fridgeHistory.shift(); freezerHistory.shift(); garageHistory.shift();
@@ -204,78 +213,6 @@ function connectTempMonitorSSE() {
         console.error("DEBUG: Temp Monitor EventSource failed:", err);
         tempMonitorStatusElement.textContent = (err.target && err.target.readyState === EventSource.CLOSED) ? 'Conn. Closed' : "Conn. Error";
         tempMonitorStatusElement.style.color = 'red';
-    };
-}
-
-
-// --- Function to Connect to Sump Monitor SSE ---
-function connectSumpMonitorSSE() {
-     console.log("DEBUG: Initializing Sump Monitor connection.");
-     if (!SUMP_MONITOR_DEVICE_ID || SUMP_MONITOR_DEVICE_ID === "YOUR_SUMP_PUMP_DEVICE_ID_HERE" || !SUMP_MONITOR_ACCESS_TOKEN || SUMP_MONITOR_ACCESS_TOKEN === "YOUR_SUMP_PUMP_ACCESS_TOKEN_HERE") {
-        console.error("DEBUG: Sump Monitor Device ID or Access Token not set (checked in connect function).");
-        sumpMonitorStatusElement.textContent = "Config Error!";
-        sumpMonitorStatusElement.style.color = 'red';
-        return;
-    }
-
-    const sseUrl = `https://api.particle.io/v1/devices/${SUMP_MONITOR_DEVICE_ID}/events/${SUMP_MONITOR_EVENT_NAME}?access_token=${SUMP_MONITOR_ACCESS_TOKEN}`;
-    console.log(`DEBUG: Attempting Sump Monitor SSE connection (Token Hidden)`);
-    sumpMonitorStatusElement.textContent = "Connecting...";
-     sumpMonitorStatusElement.style.color = '#555';
-
-    const eventSource = new EventSource(sseUrl);
-
-    eventSource.onopen = function() {
-        console.log("DEBUG: Sump Monitor SSE Connected!");
-        sumpMonitorStatusElement.textContent = "Connected";
-        sumpMonitorStatusElement.style.color = 'green';
-    };
-
-    eventSource.addEventListener(SUMP_MONITOR_EVENT_NAME, function(event) {
-        try {
-            const particleEventData = JSON.parse(event.data);
-            const jsonData = JSON.parse(particleEventData.data);
-            const timestamp = new Date(particleEventData.published_at);
-
-            console.log("DEBUG: Parsed sump data:", jsonData);
-
-            // --- Update Live Text Display (Sump) ---
-            if (jsonData.temp !== undefined) sumpTempElement.textContent = jsonData.temp.toFixed(1);
-            if (jsonData.extPower !== undefined) sumpPowerElement.textContent = jsonData.extPower.toFixed(2);
-            if (jsonData.sumpRunTime !== undefined) sumpRuntimeElement.textContent = jsonData.sumpRunTime.toFixed(1);
-            if (jsonData.timeSinceRun !== undefined) sumpSinceRunElement.textContent = jsonData.timeSinceRun.toFixed(1);
-
-            sumpMonitorLastUpdatedElement.textContent = timestamp.toLocaleTimeString();
-            sumpMonitorStatusElement.textContent = "Receiving data";
-            sumpMonitorStatusElement.style.color = 'green';
-
-            // --- Update Data History & Charts for Sump ---
-            sumpTimeHistory.push(timestamp);
-            sumpTempHistory.push(jsonData.temp);
-            sumpPowerHistory.push(jsonData.extPower);
-            sumpRuntimeHistory.push(jsonData.sumpRunTime);
-            sumpSinceRunHistory.push(jsonData.timeSinceRun);
-            
-            if (sumpTimeHistory.length > MAX_HISTORY_POINTS) {
-                sumpTimeHistory.shift(); sumpTempHistory.shift(); sumpPowerHistory.shift(); sumpRuntimeHistory.shift(); sumpSinceRunHistory.shift();
-            }
-            
-            if (sumpTempChartInstance) { sumpTempChartInstance.data.labels = sumpTimeHistory; sumpTempChartInstance.data.datasets[0].data = sumpTempHistory; sumpTempChartInstance.update(); }
-            if (sumpPowerChartInstance) { sumpPowerChartInstance.data.labels = sumpTimeHistory; sumpPowerChartInstance.data.datasets[0].data = sumpPowerHistory; sumpPowerChartInstance.update(); }
-            if (sumpRuntimeChartInstance) { sumpRuntimeChartInstance.data.labels = sumpTimeHistory; sumpRuntimeChartInstance.data.datasets[0].data = sumpRuntimeHistory; sumpRuntimeChartInstance.update(); }
-            if (sumpSinceRunChartInstance) { sumpSinceRunChartInstance.data.labels = sumpTimeHistory; sumpSinceRunChartInstance.data.datasets[0].data = sumpSinceRunHistory; sumpSinceRunChartInstance.update(); }
-
-        } catch (error) {
-            console.error("DEBUG: Error processing Sump Monitor event data:", error, "Raw data:", event.data);
-            sumpMonitorStatusElement.textContent = "Data Error";
-            sumpMonitorStatusElement.style.color = 'orange';
-        }
-    }, false);
-
-     eventSource.onerror = function(err) {
-        console.error("DEBUG: Sump Monitor EventSource failed:", err);
-        sumpMonitorStatusElement.textContent = (err.target && err.target.readyState === EventSource.CLOSED) ? 'Conn. Closed' : "Conn. Error";
-        sumpMonitorStatusElement.style.color = 'red';
     };
 }
 
