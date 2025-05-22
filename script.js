@@ -312,7 +312,7 @@ function fetchHistoricalDataFromSheets(rangeHours = 1) {
 
                 // Filter rows outside the selected range
                 const diffHours = (now - ts) / (1000 * 60 * 60);
-        //        if (diffHours > rangeHours) return;
+                if (diffHours > rangeHours) return;
 
                 timeHistory.push(ts);
                 fridgeHistory.push(parseFloat(fridge));
