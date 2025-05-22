@@ -115,6 +115,12 @@ document.addEventListener('DOMContentLoaded', () => {
          return;
      }
 
+    document.getElementById('history-range').addEventListener('change', (e) => {
+        const selectedHours = parseInt(e.target.value, 10);
+        fetchHistoricalDataFromSheets(selectedHours);
+    });
+    fetchHistoricalDataFromSheets(1); // default to last 1 hour
+    
      fridgeChartInstance = createChart('fridgeChart', 'Fridge Temp (°F)', 'rgb(255, 99, 132)');
      freezerChartInstance = createChart('freezerChart', 'Freezer Temp (°F)', 'rgb(54, 162, 235)');
      garageChartInstance = createChart('garageChart', 'Garage Temp (°F)', 'rgb(75, 192, 192)');
@@ -281,9 +287,9 @@ function connectSumpMonitorSSE() {
     };
 }
 
-function fetchHistoricalDataFromSheets() {
+function fetchHistoricalDataFromSheets(rangeHours = 1) {
     
-    fetch(CSV_URL)
+    /*fetch(CSV_URL)
         .then(response => response.text())
         .then(csv => {
             const lines = csv.split('\n').slice(1); // skip header
@@ -292,6 +298,32 @@ function fetchHistoricalDataFromSheets() {
                 //const ts = new Date(timestamp);
                 const ts = new Date(timestamp);
                 const localTs = new Date(ts.getTime() - ts.getTimezoneOffset() * 60000);
+                timeHistory.push(ts);
+                fridgeHistory.push(parseFloat(fridge));
+                freezerHistory.push(parseFloat(freezer));
+                garageHistory.push(parseFloat(garage));
+            });*/
+
+        fetch(CSV_URL)
+        .then(response => response.text())
+        .then(csv => {
+            const now = new Date();
+            const lines = csv.split('\n').slice(1); // Skip header
+
+            // Clear history arrays
+            timeHistory.length = 0;
+            fridgeHistory.length = 0;
+            freezerHistory.length = 0;
+            garageHistory.length = 0;
+
+            lines.forEach(line => {
+                const [timestamp, fridge, freezer, garage] = line.split(',');
+                const ts = new Date(timestamp);
+
+                // Filter rows outside the selected range
+                const diffHours = (now - ts) / (1000 * 60 * 60);
+                if (diffHours > rangeHours) return;
+
                 timeHistory.push(ts);
                 fridgeHistory.push(parseFloat(fridge));
                 freezerHistory.push(parseFloat(freezer));
@@ -323,7 +355,7 @@ function fetchHistoricalDataFromSheets() {
                 garageChartInstance.update();
             }
 
-            document.getElementById('historical-chart-container-gsheets').textContent = "Historical data loaded.";
+            document.getElementById('historical-chart-container-gsheets').textContent = `Loaded last ${rangeHours} hours of data.`;
         })
         .catch(error => {
             console.error("Failed to load CSV data:", error);
