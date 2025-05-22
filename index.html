@@ -54,6 +54,14 @@
     </section>
     
     <section id="historical-data-section">
+        <label for="history-range">Select History Range:</label>
+            <select id="history-range">
+                <option value="1" selected>Last 1 Hour</option>
+                <option value="6">Last 6 Hours</option>
+                <option value="12">Last 12 Hours</option>
+                <option value="24">Last 24 Hours</option>
+                <option value="48">Last 48 Hours</option>
+            </select>
         <div id="historical-chart-container-gsheets">
             Historical data loading...
         </div>
