@@ -183,7 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedHours = parseInt(e.target.value, 10);
         fetchHistoricalDataFromSheets(selectedHours);
     });
-    fetchHistoricalDataFromSheets(1); // default to last 1 hour
+
     
      fridgeChartInstance = createChart('fridgeChart', 'Fridge Temp (°F)', 'rgb(255, 99, 132)');
      freezerChartInstance = createChart('freezerChart', 'Freezer Temp (°F)', 'rgb(54, 162, 235)');
