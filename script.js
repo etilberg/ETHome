@@ -391,6 +391,7 @@ function fetchHistoricalDataFromSheets(rangeHours = 1) {
             if (fridgeChartInstance) {
                 fridgeChartInstance.data.labels = timeHistory;
                 fridgeChartInstance.data.datasets[0].data = fridgeHistory;
+                console.log("Fridge chart range:", timeHistory[0], "to", timeHistory[timeHistory.length - 1]);
                 fridgeChartInstance.options.scales.x.min = timeHistory[0];
                 fridgeChartInstance.options.scales.x.max = timeHistory[timeHistory.length - 1];
                 fridgeChartInstance.update();
