@@ -83,7 +83,7 @@ return new Chart(ctx, {
                 title: {
                     display: true,
                     text: 'Time'
-                }
+                },
             min: timeHistory[0], // <-- set dynamically before chart update
             max: timeHistory[timeHistory.length - 1]
             },
@@ -291,21 +291,6 @@ function connectSumpMonitorSSE() {
 
 function fetchHistoricalDataFromSheets(rangeHours = 1) {
     
-    /*fetch(CSV_URL)
-        .then(response => response.text())
-        .then(csv => {
-            const lines = csv.split('\n').slice(1); // skip header
-            lines.forEach(line => {
-                const [timestamp, garage, freezer, fridge] = line.split(',');
-                //const ts = new Date(timestamp);
-                const ts = new Date(timestamp);
-                const localTs = new Date(ts.getTime() - ts.getTimezoneOffset() * 60000);
-                timeHistory.push(ts);
-                fridgeHistory.push(parseFloat(fridge));
-                freezerHistory.push(parseFloat(freezer));
-                garageHistory.push(parseFloat(garage));
-            });*/
-
         fetch(CSV_URL)
         .then(response => response.text())
         .then(csv => {
