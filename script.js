@@ -83,9 +83,7 @@ return new Chart(ctx, {
                 title: {
                     display: true,
                     text: 'Time'
-                },
-            min: timeHistory[0], // <-- set dynamically before chart update
-            max: timeHistory[timeHistory.length - 1]
+                }
             },
             y: {
                 beginAtZero: false,
