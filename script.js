@@ -165,8 +165,6 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
             }
         }
     });
-}
-}
 
 // Initialize charts once the DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
