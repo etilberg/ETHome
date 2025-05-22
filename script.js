@@ -317,7 +317,7 @@ function fetchHistoricalDataFromSheets(rangeHours = 1) {
             garageHistory.length = 0;
 
             lines.forEach(line => {
-                const [timestamp, fridge, freezer, garage] = line.split(',');
+                const [timestamp, garage, freezer, fridge] = line.split(',');
                 const ts = new Date(timestamp);
 
                 // Filter rows outside the selected range
