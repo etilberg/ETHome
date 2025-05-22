@@ -344,23 +344,23 @@ function fetchHistoricalDataFromSheets(rangeHours = 1) {
             if (fridgeChartInstance) {
                 fridgeChartInstance.data.labels = timeHistory;
                 fridgeChartInstance.data.datasets[0].data = fridgeHistory;
-                fridgeChartInstance.update();
                 fridgeChartInstance.options.scales.x.min = timeHistory[0];
                 fridgeChartInstance.options.scales.x.max = timeHistory[timeHistory.length - 1];
+                fridgeChartInstance.update();
             }
             if (freezerChartInstance) {
                 freezerChartInstance.data.labels = timeHistory;
                 freezerChartInstance.data.datasets[0].data = freezerHistory;
-                freezerChartInstance.update();
                 freezerChartInstance.options.scales.x.min = timeHistory[0];
                 freezerChartInstance.options.scales.x.max = timeHistory[timeHistory.length - 1];
+                freezerChartInstance.update();
             }
             if (garageChartInstance) {
                 garageChartInstance.data.labels = timeHistory;
                 garageChartInstance.data.datasets[0].data = garageHistory;
-                garageChartInstance.update();
                 garageChartInstance.options.scales.x.min = timeHistory[0];
                 garageChartInstance.options.scales.x.max = timeHistory[timeHistory.length - 1];
+                garageChartInstance.update();
             }
 
             document.getElementById('historical-chart-container-gsheets').textContent = `Loaded last ${rangeHours} hours of data.`;
