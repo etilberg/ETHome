@@ -199,7 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
      connectSumpMonitorSSE();
 
 });
-
+}
 
 // --- Function to Connect to Temp Monitor SSE ---
 function connectTempMonitorSSE() {
