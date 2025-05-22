@@ -282,8 +282,7 @@ function connectSumpMonitorSSE() {
 }
 
 function fetchHistoricalDataFromSheets() {
-    const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRph0sdeOMbpa_5nOIC36yVgte5zWbxEXCVy6GMzB6ehhkV49_M_KMJAMx2HHM8XAi9hN2KvO83aR9b/pub?gid=0&single=true&output=csv';
-
+    
     fetch(CSV_URL)
         .then(response => response.text())
         .then(csv => {
