@@ -127,8 +127,8 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
                 borderWidth: 2,
                 fill: false,
                 tension: 0.1,
-                pointRadius: 0,           // Hide points normally
-                pointHoverRadius: 4       // Show dots on hover
+                pointRadius: 0,           // Hide points
+                pointHoverRadius: 4       // Show dot on hover
             }]
         },
         options: {
@@ -148,7 +148,7 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
                     title: {
                         display: true,
                         text: 'Time'
-                    },
+                    }
                 },
                 y: {
                     beginAtZero: false,
@@ -165,6 +165,7 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
             }
         }
     });
+}
 
 // Initialize charts once the DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
