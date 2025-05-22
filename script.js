@@ -323,10 +323,10 @@ function fetchHistoricalDataFromSheets() {
                 garageChartInstance.update();
             }
 
-            document.getElementById('historical-chart-container-gsheets').textContent = "Historical data loaded.";
+            //document.getElementById('historical-chart-container-gsheets').textContent = "Historical data loaded.";
         })
-        .catch(error => {
-            console.error("Failed to load CSV data:", error);
-            document.getElementById('historical-chart-container-gsheets').textContent = "Failed to load historical data.";
+       // .catch(error => {
+        //    console.error("Failed to load CSV data:", error);
+        //    document.getElementById('historical-chart-container-gsheets').textContent = "Failed to load historical data.";
         });
 }
