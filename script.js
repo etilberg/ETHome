@@ -12,7 +12,6 @@ const liveFridgeElement = document.getElementById('live-fridge');
 const liveFreezerElement = document.getElementById('live-freezer');
 const liveGarageElement = document.getElementById('live-garage');
 const tempMonitorLastUpdatedElement = document.getElementById('temp-monitor-last-updated');
-// New Temp Monitor Heater Elements
 const liveHeaterValueElement = document.getElementById('live-heater-value');
 const liveHeaterStatusElement = document.getElementById('live-heater-status');
 
@@ -41,66 +40,6 @@ let sumpSinceRunHistory = [];
 let fridgeChartInstance, freezerChartInstance, garageChartInstance;
 let sumpTempChartInstance, sumpPowerChartInstance, sumpRuntimeChartInstance, sumpSinceRunChartInstance;
 
-/*function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)') {
-    const canvasElement = document.getElementById(canvasId);
-    if (!canvasElement) {
-        console.error(`DEBUG: Canvas element with ID '${canvasId}' not found!`);
-        return null;
-    }
-    const ctx = canvasElement.getContext('2d');
-     if (!ctx) {
-        console.error(`DEBUG: Failed to get 2D context for canvas ID '${canvasId}'!`);
-        return null;
-    }
-    console.log(`DEBUG: Creating chart for canvas ID '${canvasId}'`);
-return new Chart(ctx, {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [{
-            label: label,
-            data: [],
-            borderColor: borderColor,
-            borderWidth: 2,
-            fill: false,
-            tension: 0.1
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-            x: {
-                type: 'time',
-                time: {
-                    tooltipFormat: 'h:mm a',
-                    displayFormats: {
-                        minute: 'h:mm a',
-                        hour: 'h a',
-                        day: 'MMM d'
-                    }
-                },
-                title: {
-                    display: true,
-                    text: 'Time'
-                }
-            },
-            y: {
-                beginAtZero: false,
-                title: {
-                    display: true,
-                    text: yLabel
-                }
-            }
-        },
-        plugins: {
-            legend: {
-                display: true
-            }
-        }
-    }
-});
-*/
 function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)') {
     const canvasElement = document.getElementById(canvasId);
     if (!canvasElement) {
@@ -194,8 +133,10 @@ document.addEventListener('DOMContentLoaded', () => {
      sumpSinceRunChartInstance = createChart('sumpSinceRunChart', 'Time Since Last Run (min)', 'rgb(201, 203, 207)', 'Minutes');
 
      console.log("DEBUG: Charts initialization attempted.");
-
-    fetchHistoricalDataFromSheets();
+    
+    const defaultHours = parseInt(document.getElementById('history-range').value, 10);
+    fetchHistoricalDataFromSheets(defaultHours);
+    
      connectTempMonitorSSE();
      connectSumpMonitorSSE();
 
