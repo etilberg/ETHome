@@ -19,7 +19,12 @@ const SUMP_MONITOR_EVENT_NAME = "sumpData";
 const MAX_HISTORY_POINTS = 60; // History for Fridge/Freezer charts
 // config.js (Add this line)
 const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyInmR24-KePk5B61OqiCAEbm6ZkMKqDdK3Hb8EPxvjaj8AWS1OOxoLaHlXHMjbFF0AIQ/exec';
-
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRph0sdeOMbpa_5nOIC36yVgte5zWbxEXCVy6GMzB6ehhkV49_M_KMJAMx2HHM8XAi9hN2KvO83aR9b/pub?gid=0&single=true&output=csv';
+ /* the CSV_URL is from:
+  Publish your Google Sheet to the web
+  Open the sheet
+  Click File > Share > Publish to Web
+  Select the correct sheet and CSV format*/
 
 // --- End of Configuration ---
 console.log("DEBUG: config.js loaded.");
