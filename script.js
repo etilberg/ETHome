@@ -84,6 +84,8 @@ return new Chart(ctx, {
                     display: true,
                     text: 'Time'
                 }
+            min: timeHistory[0], // <-- set dynamically before chart update
+            max: timeHistory[timeHistory.length - 1]
             },
             y: {
                 beginAtZero: false,
@@ -343,16 +345,22 @@ function fetchHistoricalDataFromSheets(rangeHours = 1) {
                 fridgeChartInstance.data.labels = timeHistory;
                 fridgeChartInstance.data.datasets[0].data = fridgeHistory;
                 fridgeChartInstance.update();
+                fridgeChartInstance.options.scales.x.min = timeHistory[0];
+                fridgeChartInstance.options.scales.x.max = timeHistory[timeHistory.length - 1];
             }
             if (freezerChartInstance) {
                 freezerChartInstance.data.labels = timeHistory;
                 freezerChartInstance.data.datasets[0].data = freezerHistory;
                 freezerChartInstance.update();
+                freezerChartInstance.options.scales.x.min = timeHistory[0];
+                freezerChartInstance.options.scales.x.max = timeHistory[timeHistory.length - 1];
             }
             if (garageChartInstance) {
                 garageChartInstance.data.labels = timeHistory;
                 garageChartInstance.data.datasets[0].data = garageHistory;
                 garageChartInstance.update();
+                garageChartInstance.options.scales.x.min = timeHistory[0];
+                garageChartInstance.options.scales.x.max = timeHistory[timeHistory.length - 1];
             }
 
             document.getElementById('historical-chart-container-gsheets').textContent = `Loaded last ${rangeHours} hours of data.`;
