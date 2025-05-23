@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Device Dashboard</title>
+    <title>ET Home Dashboard</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/moment@^2"></script>
@@ -11,7 +11,7 @@
 </head>
 <body>
 
-    <h1>Multi-Device Dashboard</h1>
+    <h1>ET Home Dashboard</h1>
 
     <section id="temp-monitor-section">
         <h2>Fridge/Freezer Monitor (<span id="temp-monitor-status">Initializing...</span>)</h2>
@@ -23,7 +23,7 @@
             <div>Heater Status: <span id="live-heater-status">--</span></div>
         </div>
          <p><small>Last updated: <span id="temp-monitor-last-updated">Never</span></small></p>
-        <h3>Recent History (Fridge/Freezer Monitor)</h3>
+        <h3>Recent History (Fridge/Freezer)</h3>
         <div class="chart-container">
             <canvas id="fridgeChart"></canvas>
         </div>
@@ -34,7 +34,19 @@
             <canvas id="garageChart"></canvas>
         </div>
     </section>
-
+    <section id="historical-data-section">
+        <label for="history-range">Select History Range:</label>
+            <select id="history-range">
+                <option value="1">Last 1 Hour</option>
+                <option value="2" selected>Last 2 Hours</option>
+                <option value="4">Last 4 Hours</option>
+                <option value="12">Last 12 Hours</option>
+                <option value="24">Last 24 Hours</option>
+            </select>
+        <div id="historical-chart-container-gsheets">
+            Historical data loading...
+        </div>
+    </section>
     <section id="sump-monitor-section">
         <h2>Sump Pump Monitor (<span id="sump-monitor-status">Initializing...</span>)</h2>
          <div class="live-values">
@@ -53,21 +65,6 @@
         <div class="chart-container"><canvas id="sumpSinceRunChart"></canvas></div>
     </section>
     
-    <section id="historical-data-section">
-        <label for="history-range">Select History Range:</label>
-            <select id="history-range">
-                <option value="1" selected>Last 1 Hour</option>
-                <option value="6">Last 6 Hours</option>
-                <option value="12">Last 12 Hours</option>
-                <option value="24">Last 24 Hours</option>
-                <option value="48">Last 48 Hours</option>
-            </select>
-        <div id="historical-chart-container-gsheets">
-            Historical data loading...
-        </div>
-    </section>
-
-
     <script src="config.js"></script>
     <script src="script.js"></script>
 </body>
