@@ -121,11 +121,6 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
                     }
                 }
             },
-            plugins: {
-                legend: {
-                    display: true
-                }
-            }
         }
     });
 }
