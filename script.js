@@ -40,10 +40,6 @@ let sumpSinceRunHistory = [];
 let fridgeChartInstance, freezerChartInstance, garageChartInstance;
 let sumpTempChartInstance, sumpPowerChartInstance, sumpRuntimeChartInstance, sumpSinceRunChartInstance;
 
-import { Chart } from 'chart.js';
-import zoomPlugin from 'chartjs-plugin-zoom';
-Chart.register(zoomPlugin);
-
 function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)') {
     const canvasElement = document.getElementById(canvasId);
     if (!canvasElement) {
