@@ -40,6 +40,10 @@ let sumpSinceRunHistory = [];
 let fridgeChartInstance, freezerChartInstance, garageChartInstance;
 let sumpTempChartInstance, sumpPowerChartInstance, sumpRuntimeChartInstance, sumpSinceRunChartInstance;
 
+import { Chart } from 'chart.js';
+import zoomPlugin from 'chartjs-plugin-zoom';
+Chart.register(zoomPlugin);
+
 function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)') {
     const canvasElement = document.getElementById(canvasId);
     if (!canvasElement) {
@@ -73,6 +77,28 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true },
+                zoom: {
+                    pan: {
+                        enabled: true,
+                        mode: 'x',
+                        modifierKey: 'ctrl' // optional: only pan with ctrl key held
+                    },
+                    zoom: {
+                        wheel: {
+                            enabled: true
+                        },
+                        pinch: {
+                            enabled: true
+                        },
+                        mode: 'x'
+                    },
+                    limits: {
+                        x: { min: 'original', max: 'original' }
+                    }
+                }
+            },
             scales: {
                 x: {
                     type: 'time',
@@ -123,7 +149,12 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchHistoricalDataFromSheets(selectedHours);
     });
 
-    
+    document.getElementById('reset-zoom').addEventListener('click', () => {
+        if (fridgeChartInstance) fridgeChartInstance.resetZoom();
+        if (freezerChartInstance) freezerChartInstance.resetZoom();
+        if (garageChartInstance) garageChartInstance.resetZoom();
+    });
+
      fridgeChartInstance = createChart('fridgeChart', 'Fridge Temp (°F)', 'rgb(255, 99, 132)');
      freezerChartInstance = createChart('freezerChart', 'Freezer Temp (°F)', 'rgb(54, 162, 235)');
      garageChartInstance = createChart('garageChart', 'Garage Temp (°F)', 'rgb(75, 192, 192)');
