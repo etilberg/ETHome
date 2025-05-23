@@ -80,8 +80,7 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
                 zoom: {
                     pan: {
                         enabled: true,
-                        mode: 'x',
-                        //modifierKey: 'ctrl' // optional: only pan with ctrl key held
+                        mode: 'x'
                     },
                     zoom: {
                         wheel: {
