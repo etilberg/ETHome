@@ -12,28 +12,6 @@
 <body>
 
     <h1>ET Home Dashboard</h1>
-
-    <section id="temp-monitor-section">
-        <h2>Fridge/Freezer Monitor (<span id="temp-monitor-status">Initializing...</span>)</h2>
-         <div class="live-values">
-            <div>Fridge: <span id="live-fridge">--</span> &deg;F</div>
-            <div>Freezer: <span id="live-freezer">--</span> &deg;F</div>
-            <div>Garage: <span id="live-garage">--</span> &deg;F</div>
-            <div>Heater Run Time: <span id="live-heater-value">--</span></div>
-            <div>Heater Status: <span id="live-heater-status">--</span></div>
-        </div>
-         <p><small>Last updated: <span id="temp-monitor-last-updated">Never</span></small></p>
-        <h3>Recent History (Fridge/Freezer)</h3>
-        <div class="chart-container">
-            <canvas id="fridgeChart"></canvas>
-        </div>
-        <div class="chart-container">
-            <canvas id="freezerChart"></canvas>
-        </div>
-        <div class="chart-container">
-            <canvas id="garageChart"></canvas>
-        </div>
-    </section>
     <section id="historical-data-section">
         <label for="history-range">Select History Range:</label>
             <select id="history-range">
@@ -47,6 +25,29 @@
             Historical data loading...
         </div>
     </section>
+    <section id="temp-monitor-section">
+        <h2>Fridge/Freezer Monitor (<span id="temp-monitor-status">Initializing...</span>)</h2>
+         <div class="live-values">
+            <div>Fridge: <span id="live-fridge">--</span> &deg;F</div>
+            <div>Freezer: <span id="live-freezer">--</span> &deg;F</div>
+            <div>Garage: <span id="live-garage">--</span> &deg;F</div>
+            <div>Heater Run Time: <span id="live-heater-value">--</span></div>
+            <div>Heater Status: <span id="live-heater-status">--</span></div>
+        </div>
+         <p><small>Last updated: <span id="temp-monitor-last-updated">Never</span></small></p>
+        <h3>History (Fridge/Freezer)</h3>
+        <div class="chart-container">
+            <canvas id="fridgeChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="freezerChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="garageChart"></canvas>
+        </div>
+        <button id="reset-zoom">Reset Zoom</button>
+    </section>
+
     <section id="sump-monitor-section">
         <h2>Sump Pump Monitor (<span id="sump-monitor-status">Initializing...</span>)</h2>
          <div class="live-values">
@@ -58,7 +59,7 @@
          <p><small>Last updated: <span id="sump-monitor-last-updated">Never</span></small></p>
         </section>
     <section>
-    <h2>Sump Pump Graphs</h2>
+    <h2>Sump Pump</h2>
         <div class="chart-container"><canvas id="sumpTempChart"></canvas></div>
         <div class="chart-container"><canvas id="sumpPowerChart"></canvas></div>
         <div class="chart-container"><canvas id="sumpRuntimeChart"></canvas></div>
