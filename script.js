@@ -241,17 +241,23 @@ function fetchTempMonitorHistoricalData(rangeHours) {
             freezerHistory = newFreezerHistory;
             garageHistory = newGarageHistory;
 
+            // ... (update freezerChartInstance and garageChartInstance similarly) ...
             if (fridgeChartInstance) {
                 fridgeChartInstance.data.labels = timeHistory;
                 fridgeChartInstance.data.datasets[0].data = fridgeHistory;
-                // No need to set min/max here as Chart.js will auto-scale initially for historical data
                 fridgeChartInstance.update();
             }
-            // ... (update freezerChartInstance and garageChartInstance similarly) ...
-            if (freezerChartInstance) { freezerChartInstance.data.labels = timeHistory; freezerChartInstance.data.datasets[0].data = freezerHistory; freezerChartInstance.update(); }
-            if (garageChartInstance) { garageChartInstance.data.labels = timeHistory; garageChartInstance.data.datasets[0].data = garageHistory; garageChartInstance.update(); }
-
-
+            if (freezerChartInstance) {
+                freezerChartInstance.data.labels = timeHistory;
+                freezerChartInstance.data.datasets[0].data = freezerHistory;
+                freezerChartInstance.update();
+            }
+            if (garageChartInstance) {
+                garageChartInstance.data.labels = timeHistory;
+                garageChartInstance.data.datasets[0].data = garageHistory;
+                garageChartInstance.update();
+            }
+            
             historicalStatusDiv.textContent = `Loaded Temp Monitor history for last ${rangeHours} hours.`;
             if (newTimeHistory.length === 0) {
                 historicalStatusDiv.textContent += " (No data in range)";
