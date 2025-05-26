@@ -265,10 +265,10 @@ function fetchTempMonitorHistoricalData(rangeHours) {
 
 // --- Fetch Historical Data for Sump Pump ---
 function fetchSumpHistoricalData(rangeHours) {
+    const historicalStatusDiv = document.getElementById('historical-chart-container-gsheets'); // Or a dedicated status div for sump
     console.log("DEBUG: Sump CSV header:", header);
     console.log(`DEBUG: Fetching Sump Pump historical data for last ${rangeHours} hours.`);
-    const historicalStatusDiv = document.getElementById('historical-chart-container-gsheets'); // Or a dedicated status div for sump
-
+    
     if (!SUMP_HISTORY_CSV_URL || SUMP_HISTORY_CSV_URL.includes("YOUR_") ) {
         console.error("DEBUG: SUMP_HISTORY_CSV_URL is not defined or is a placeholder in config.js!");
         historicalStatusDiv.textContent += " Error: Sump History URL not configured."; // Append error
