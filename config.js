@@ -21,7 +21,7 @@ const MAX_HISTORY_POINTS = 1440; // Max points for LIVE data appending to charts
 // This was GOOGLE_APPS_SCRIPT_URL, assuming it's the CSV link for Temp Monitor
 const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyInmR24-KePk5B61OqiCAEbm6ZkMKqDdK3Hb8EPxvjaj8AWS1OOxoLaHlXHMjbFF0AIQ/exec';
 const TEMP_MONITOR_HISTORY_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRph0sdeOMbpa_5nOIC36yVgte5zWbxEXCVy6GMzB6ehhkV49_M_KMJAMx2HHM8XAi9hN2KvO83aR9b/pub?gid=0&single=true&output=csv'; // <<< VERIFY/REPLACE THIS with your actual Temp Monitor CSV publish URL
-const SUMP_HISTORY_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0LM82FFJEkD7h0B5FFjA34S-WS7CKgr3zaOLBAA7n8ybLrZ60NbBoDQl-pukkckuesAmlQOfnbbyI/pubhtml'; // <<< REPLACE THIS with the URL from "Publish to web" for Sump Pump data
+const SUMP_HISTORY_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0LM82FFJEkD7h0B5FFjA34S-WS7CKgr3zaOLBAA7n8ybLrZ60NbBoDQl-pukkckuesAmlQOfnbbyI/pub?output=csv'; // <<< REPLACE THIS with the URL from "Publish to web" for Sump Pump data
  /* the CSV_URL is from:
   Publish your Google Sheet to the web
   Open the sheet
