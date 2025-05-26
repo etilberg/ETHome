@@ -265,6 +265,7 @@ function fetchTempMonitorHistoricalData(rangeHours) {
 
 // --- Fetch Historical Data for Sump Pump ---
 function fetchSumpHistoricalData(rangeHours) {
+    console.log("DEBUG: Sump CSV header:", header);
     console.log(`DEBUG: Fetching Sump Pump historical data for last ${rangeHours} hours.`);
     const historicalStatusDiv = document.getElementById('historical-chart-container-gsheets'); // Or a dedicated status div for sump
 
