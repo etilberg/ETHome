@@ -346,8 +346,220 @@ function fetchSumpHistoricalData(rangeHours) {
 }
 
 
-// ... (Keep connectTempMonitorSSE and connectSumpMonitorSSE functions as they are) ...
-// Make sure the live data update logic in connectSumpMonitorSSE appends to the
-// correct history arrays (sumpTimeHistory, sumpTempHistory, etc.) if you want live
-// data to continue updating the charts after historical load.
-// The current connectSumpMonitorSSE in your script (4).js already updates these.
+
+// --- Function to Connect to Temp Monitor SSE ---
+function connectTempMonitorSSE() {
+    console.log("DEBUG: Initializing Temp Monitor connection.");
+    if (!TEMP_MONITOR_DEVICE_ID || TEMP_MONITOR_DEVICE_ID === "YOUR_FRIDGE_FREEZER_DEVICE_ID_HERE" || !TEMP_MONITOR_ACCESS_TOKEN || TEMP_MONITOR_ACCESS_TOKEN === "YOUR_FRIDGE_FREEZER_ACCESS_TOKEN_HERE") {
+         console.error("DEBUG: Temp Monitor Device ID or Access Token not set (checked in connect function).");
+         tempMonitorStatusElement.textContent = "Config Error!";
+         tempMonitorStatusElement.style.color = 'red';
+        return;
+    }
+
+    const sseUrl = `https://api.particle.io/v1/devices/${TEMP_MONITOR_DEVICE_ID}/events/${TEMP_MONITOR_EVENT_NAME}?access_token=${TEMP_MONITOR_ACCESS_TOKEN}`;
+    console.log(`DEBUG: Attempting Temp Monitor SSE connection (Token Hidden)`);
+    tempMonitorStatusElement.textContent = "Connecting...";
+    tempMonitorStatusElement.style.color = '#555';
+
+    const eventSource = new EventSource(sseUrl);
+
+    eventSource.onopen = function() {
+        console.log("DEBUG: Temp Monitor SSE Connected!");
+        tempMonitorStatusElement.textContent = "Connected";
+        tempMonitorStatusElement.style.color = 'green';
+    };
+
+    eventSource.addEventListener(TEMP_MONITOR_EVENT_NAME, function(event) {
+        try {
+            const particleEventData = JSON.parse(event.data);
+            const jsonData = JSON.parse(particleEventData.data); // This is your {"garage":..., "freezer":..., etc}
+            const timestamp = new Date(particleEventData.published_at);
+
+            console.log("DEBUG: Temp Monitor data received:", jsonData); // Log the received data
+
+            // --- Update Live Text Display ---
+            if (jsonData.fridge !== undefined) liveFridgeElement.textContent = jsonData.fridge.toFixed(1);
+            if (jsonData.freezer !== undefined) liveFreezerElement.textContent = jsonData.freezer.toFixed(1);
+            if (jsonData.garage !== undefined) liveGarageElement.textContent = jsonData.garage.toFixed(1);
+            
+            // --- Update New Heater Display Elements ---
+            if (jsonData.heater !== undefined && liveHeaterValueElement) {
+                liveHeaterValueElement.textContent = jsonData.heater.toFixed(2); // Assuming it's a numeric value
+            }
+            if (jsonData.heateron !== undefined && liveHeaterStatusElement) {
+                liveHeaterStatusElement.textContent = (jsonData.heateron === 1 || jsonData.heateron === "1") ? "On" : "Off";
+            }
+            // --- End New Heater Display ---
+
+            tempMonitorLastUpdatedElement.textContent = timestamp.toLocaleTimeString();
+            tempMonitorStatusElement.textContent = "Receiving data";
+            tempMonitorStatusElement.style.color = 'green';
+
+            // --- Update Data History & Charts (existing fridge/freezer/garage charts) ---
+            timeHistory.push(timestamp);
+            fridgeHistory.push(jsonData.fridge);
+            freezerHistory.push(jsonData.freezer);
+            garageHistory.push(jsonData.garage);
+
+            if (timeHistory.length > MAX_HISTORY_POINTS) {
+                timeHistory.shift(); fridgeHistory.shift(); freezerHistory.shift(); garageHistory.shift();
+            }
+
+            if (fridgeChartInstance) { fridgeChartInstance.data.labels = timeHistory; fridgeChartInstance.data.datasets[0].data = fridgeHistory; fridgeChartInstance.update(); }
+            if (freezerChartInstance) { freezerChartInstance.data.labels = timeHistory; freezerChartInstance.data.datasets[0].data = freezerHistory; freezerChartInstance.update(); }
+            if (garageChartInstance) { garageChartInstance.data.labels = timeHistory; garageChartInstance.data.datasets[0].data = garageHistory; garageChartInstance.update(); }
+
+        } catch (error) {
+            console.error("DEBUG: Error processing Temp Monitor event data:", error, "Raw data:", event.data);
+            tempMonitorStatusElement.textContent = "Data Error";
+            tempMonitorStatusElement.style.color = 'orange';
+        }
+    }, false);
+
+    eventSource.onerror = function(err) {
+        console.error("DEBUG: Temp Monitor EventSource failed:", err);
+        tempMonitorStatusElement.textContent = (err.target && err.target.readyState === EventSource.CLOSED) ? 'Conn. Closed' : "Conn. Error";
+        tempMonitorStatusElement.style.color = 'red';
+    };
+}
+
+
+// --- Function to Connect to Sump Monitor SSE ---
+function connectSumpMonitorSSE() {
+     console.log("DEBUG: Initializing Sump Monitor connection.");
+     if (!SUMP_MONITOR_DEVICE_ID || SUMP_MONITOR_DEVICE_ID === "YOUR_SUMP_PUMP_DEVICE_ID_HERE" || !SUMP_MONITOR_ACCESS_TOKEN || SUMP_MONITOR_ACCESS_TOKEN === "YOUR_SUMP_PUMP_ACCESS_TOKEN_HERE") {
+        console.error("DEBUG: Sump Monitor Device ID or Access Token not set (checked in connect function).");
+        sumpMonitorStatusElement.textContent = "Config Error!";
+        sumpMonitorStatusElement.style.color = 'red';
+        return;
+    }
+
+    const sseUrl = `https://api.particle.io/v1/devices/${SUMP_MONITOR_DEVICE_ID}/events/${SUMP_MONITOR_EVENT_NAME}?access_token=${SUMP_MONITOR_ACCESS_TOKEN}`;
+    console.log(`DEBUG: Attempting Sump Monitor SSE connection (Token Hidden)`);
+    sumpMonitorStatusElement.textContent = "Connecting...";
+     sumpMonitorStatusElement.style.color = '#555';
+
+    const eventSource = new EventSource(sseUrl);
+
+    eventSource.onopen = function() {
+        console.log("DEBUG: Sump Monitor SSE Connected!");
+        sumpMonitorStatusElement.textContent = "Connected";
+        sumpMonitorStatusElement.style.color = 'green';
+    };
+
+    eventSource.addEventListener(SUMP_MONITOR_EVENT_NAME, function(event) {
+        try {
+            const particleEventData = JSON.parse(event.data);
+            const jsonData = JSON.parse(particleEventData.data);
+            const timestamp = new Date(particleEventData.published_at);
+
+            console.log("DEBUG: Parsed sump data:", jsonData);
+
+            // --- Update Live Text Display (Sump) ---
+            if (jsonData.temp !== undefined) sumpTempElement.textContent = jsonData.temp.toFixed(1);
+            if (jsonData.extPower !== undefined) sumpPowerElement.textContent = jsonData.extPower.toFixed(2);
+            if (jsonData.sumpRunTime !== undefined) sumpRuntimeElement.textContent = jsonData.sumpRunTime.toFixed(1);
+            if (jsonData.timeSinceRun !== undefined) sumpSinceRunElement.textContent = jsonData.timeSinceRun.toFixed(1);
+
+            sumpMonitorLastUpdatedElement.textContent = timestamp.toLocaleTimeString();
+            sumpMonitorStatusElement.textContent = "Receiving data";
+            sumpMonitorStatusElement.style.color = 'green';
+
+            // --- Update Data History & Charts for Sump ---
+            sumpTimeHistory.push(timestamp);
+            sumpTempHistory.push(jsonData.temp);
+            sumpPowerHistory.push(jsonData.extPower);
+            sumpRuntimeHistory.push(jsonData.sumpRunTime);
+            sumpSinceRunHistory.push(jsonData.timeSinceRun);
+            
+            if (sumpTimeHistory.length > MAX_HISTORY_POINTS) {
+                sumpTimeHistory.shift(); sumpTempHistory.shift(); sumpPowerHistory.shift(); sumpRuntimeHistory.shift(); sumpSinceRunHistory.shift();
+            }
+            
+            if (sumpTempChartInstance) { sumpTempChartInstance.data.labels = sumpTimeHistory; sumpTempChartInstance.data.datasets[0].data = sumpTempHistory; sumpTempChartInstance.update(); }
+            if (sumpPowerChartInstance) { sumpPowerChartInstance.data.labels = sumpTimeHistory; sumpPowerChartInstance.data.datasets[0].data = sumpPowerHistory; sumpPowerChartInstance.update(); }
+            if (sumpRuntimeChartInstance) { sumpRuntimeChartInstance.data.labels = sumpTimeHistory; sumpRuntimeChartInstance.data.datasets[0].data = sumpRuntimeHistory; sumpRuntimeChartInstance.update(); }
+            if (sumpSinceRunChartInstance) { sumpSinceRunChartInstance.data.labels = sumpTimeHistory; sumpSinceRunChartInstance.data.datasets[0].data = sumpSinceRunHistory; sumpSinceRunChartInstance.update(); }
+
+        } catch (error) {
+            console.error("DEBUG: Error processing Sump Monitor event data:", error, "Raw data:", event.data);
+            sumpMonitorStatusElement.textContent = "Data Error";
+            sumpMonitorStatusElement.style.color = 'orange';
+        }
+    }, false);
+
+     eventSource.onerror = function(err) {
+        console.error("DEBUG: Sump Monitor EventSource failed:", err);
+        sumpMonitorStatusElement.textContent = (err.target && err.target.readyState === EventSource.CLOSED) ? 'Conn. Closed' : "Conn. Error";
+        sumpMonitorStatusElement.style.color = 'red';
+    };
+}
+
+function fetchHistoricalDataFromSheets(rangeHours = 1) {
+    
+        fetch(CSV_URL)
+        .then(response => response.text())
+        .then(csv => {
+            const now = new Date();
+            const lines = csv.split('\n').slice(1); // Skip header
+
+            // Clear history arrays
+            timeHistory.length = 0;
+            fridgeHistory.length = 0;
+            freezerHistory.length = 0;
+            garageHistory.length = 0;
+
+            lines.forEach(line => {
+                const [timestamp, garage, freezer, fridge] = line.split(',');
+                const ts = new Date(timestamp);
+
+                // Filter rows outside the selected range
+                const diffHours = (now - ts) / (1000 * 60 * 60);
+                if (diffHours > rangeHours) return;
+
+                timeHistory.push(ts);
+                fridgeHistory.push(parseFloat(fridge));
+                freezerHistory.push(parseFloat(freezer));
+                garageHistory.push(parseFloat(garage));
+            });
+
+            // Trim
+            if (timeHistory.length > MAX_HISTORY_POINTS) {
+                const excess = timeHistory.length - MAX_HISTORY_POINTS;
+                timeHistory.splice(0, excess);
+                fridgeHistory.splice(0, excess);
+                freezerHistory.splice(0, excess);
+                garageHistory.splice(0, excess);
+            }
+
+            if (fridgeChartInstance) {
+                fridgeChartInstance.data.labels = timeHistory;
+                fridgeChartInstance.data.datasets[0].data = fridgeHistory;
+                console.log("Fridge chart range:", timeHistory[0], "to", timeHistory[timeHistory.length - 1]);
+                fridgeChartInstance.options.scales.x.min = timeHistory[0];
+                fridgeChartInstance.options.scales.x.max = timeHistory[timeHistory.length - 1];
+                fridgeChartInstance.update();
+            }
+            if (freezerChartInstance) {
+                freezerChartInstance.data.labels = timeHistory;
+                freezerChartInstance.data.datasets[0].data = freezerHistory;
+                freezerChartInstance.options.scales.x.min = timeHistory[0];
+                freezerChartInstance.options.scales.x.max = timeHistory[timeHistory.length - 1];
+                freezerChartInstance.update();
+            }
+            if (garageChartInstance) {
+                garageChartInstance.data.labels = timeHistory;
+                garageChartInstance.data.datasets[0].data = garageHistory;
+                garageChartInstance.options.scales.x.min = timeHistory[0];
+                garageChartInstance.options.scales.x.max = timeHistory[timeHistory.length - 1];
+                garageChartInstance.update();
+            }
+
+            document.getElementById('historical-chart-container-gsheets').textContent = `Loaded last ${rangeHours} hours of data.`;
+        })
+        .catch(error => {
+            console.error("Failed to load CSV data:", error);
+            document.getElementById('historical-chart-container-gsheets').textContent = "Failed to load historical data.";
+        });
+}
