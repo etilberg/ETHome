@@ -288,12 +288,13 @@ function fetchSumpHistoricalData(rangeHours) {
             }
             const header = lines.shift().split(',');
 
+
             // Based on your SumpPump - SumpRunData.csv
             // Find column indices - more robust than fixed indices
-            const tsIdx = header.findIndex(h => h.trim().toLowerCase().includes('timestamp')); // Column A
-            const runtimeIdx = header.findIndex(h => h.trim().toLowerCase().includes('sump run time (sec)')); // Column C
-            const sinceRunIdx = header.findIndex(h => h.trim().toLowerCase().includes('time since last run (min)')); // Column D
-            const tempIdx = header.findIndex(h => h.trim().toLowerCase().includes('temperature (f)')); // Column F
+            const tsIdx = header.findIndex(h => h.trim().toLowerCase().includes('Timestamp')); // Column A
+            const runtimeIdx = header.findIndex(h => h.trim().toLowerCase().includes('SumpRunTime')); // Column C
+            const sinceRunIdx = header.findIndex(h => h.trim().toLowerCase().includes('TimeSinceLastRun')); // Column D
+            const tempIdx = header.findIndex(h => h.trim().toLowerCase().includes('Temperature' // Column F
 
             if (tsIdx === -1 || runtimeIdx === -1 || sinceRunIdx === -1 || tempIdx === -1) {
                 console.error("DEBUG: Could not find required columns in Sump Pump CSV header:", header);
