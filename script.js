@@ -200,6 +200,7 @@ function fetchTempMonitorHistoricalData(rangeHours) {
                 return;
             }
             const header = lines.shift().split(','); // Assuming first line is header
+            console.log("DEBUG: Temp CSV Header:", header);
 
             // Find column indices - more robust than fixed indices
             const tsIdx = header.findIndex(h => h.trim().toLowerCase().includes('timestamp')); // Or your exact timestamp column name
@@ -291,7 +292,7 @@ function fetchSumpHistoricalData(rangeHours) {
             }
 
             const header = lines.shift().split(',');
-            console.log("DEBUG: Sump CSV Header:", header);
+           // console.log("DEBUG: Sump CSV Header:", header);
 
             // Flexible column detection
             const tsIdx       = header.findIndex(h => h.toLowerCase().includes('timestamp'));
