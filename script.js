@@ -501,7 +501,7 @@ function connectSumpMonitorSSE() {
         sumpMonitorStatusElement.style.color = 'red';
     };
 }
-
+/*
 function fetchHistoricalDataFromSheets(rangeHours = 1) {
     console.log(`DEBUG: Fetching Temp Monitor historical data for last ${rangeHours} hours.`);
 
@@ -568,5 +568,5 @@ function fetchHistoricalDataFromSheets(rangeHours = 1) {
             console.error("DEBUG: Failed to fetch historical temp data:", err);
         });
 }
-
+*/
   
