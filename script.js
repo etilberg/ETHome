@@ -288,14 +288,15 @@ function fetchSumpHistoricalData(rangeHours) {
             console.log("DEBUG: Sump CSV Header:", header);
 
             // Flexible column detection
-            const tsIdx       = header.findIndex(h => h.toLowerCase().includes('Timestamp'));
-            const runtimeIdx  = header.findIndex(h => h.toLowerCase().includes('SumpRunTime'));
-            const sinceRunIdx = header.findIndex(h => h.toLowerCase().includes('TimeSinceLastRun'));
-            const tempIdx     = header.findIndex(h => h.toLowerCase().includes('Temperature'));
+            const tsIdx       = header.findIndex(h => h.toLowerCase().includes('timestamp'));
+            const runtimeIdx  = header.findIndex(h => h.toLowerCase().includes('sumpruntime'));
+            const sinceRunIdx = header.findIndex(h => h.toLowerCase().includes('timesince'));
+            const tempIdx     = header.findIndex(h => h.toLowerCase().includes('temp'));
+            const powerIdx    = -1; // Not present in this CSV
 
-            if ([tsIdx, runtimeIdx, sinceRunIdx, tempIdx].includes(-1)) {
-                console.error("DEBUG: Could not find one or more required Sump columns in header:", header);
-                return;
+            if ([tsIdx, runtimeIdx, sinceRunIdx, tempIdx].some(i => i === -1)) {
+              console.error("DEBUG: Could not find one or more required Sump columns in header:", header);
+              return;
             }
 
             // Clear old data
