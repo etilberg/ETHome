@@ -265,88 +265,93 @@ function fetchTempMonitorHistoricalData(rangeHours) {
 
 // --- Fetch Historical Data for Sump Pump ---
 function fetchSumpHistoricalData(rangeHours) {
-    const historicalStatusDiv = document.getElementById('historical-chart-container-gsheets'); // Or a dedicated status div for sump
-
     console.log(`DEBUG: Fetching Sump Pump historical data for last ${rangeHours} hours.`);
-    
-    if (!SUMP_HISTORY_CSV_URL || SUMP_HISTORY_CSV_URL.includes("YOUR_") ) {
-        console.error("DEBUG: SUMP_HISTORY_CSV_URL is not defined or is a placeholder in config.js!");
-        historicalStatusDiv.textContent += " Error: Sump History URL not configured."; // Append error
+
+    if (!SUMP_HISTORY_CSV_URL || SUMP_HISTORY_CSV_URL.includes("YOUR_")) {
+        console.error("DEBUG: SUMP_HISTORY_CSV_URL not set or still using placeholder.");
         return;
     }
-    historicalStatusDiv.textContent += ` Loading Sump history (${rangeHours}h)...`; // Append status
 
     fetch(SUMP_HISTORY_CSV_URL)
         .then(response => {
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for Sump History`);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             return response.text();
         })
         .then(csvText => {
-            const lines = csvText.trim().split('\\n');
+            const lines = csvText.trim().split('\n');
             if (lines.length <= 1) {
-                historicalStatusDiv.textContent += " No historical Sump data found.";
+                console.warn("DEBUG: Sump CSV has no data rows.");
                 return;
             }
+
             const header = lines.shift().split(',');
-    console.log("DEBUG: Sump CSV header:", header);
+            console.log("DEBUG: Sump CSV Header:", header);
 
-            // Based on your SumpPump - SumpRunData.csv
-            // Find column indices - more robust than fixed indices
-            const tsIdx = header.findIndex(h => h.trim().toLowerCase().includes('Timestamp')); // Column A
-            const runtimeIdx = header.findIndex(h => h.trim().toLowerCase().includes('SumpRunTime')); // Column C
-            const sinceRunIdx = header.findIndex(h => h.trim().toLowerCase().includes('TimeSinceLastRun')); // Column D
-            const tempIdx = header.findIndex(h => h.trim().toLowerCase().includes('Temperature')); // Column F
+            // Flexible column detection
+            const tsIdx       = header.findIndex(h => h.toLowerCase().includes('timestamp'));
+            const runtimeIdx  = header.findIndex(h => h.toLowerCase().includes('runtime'));
+            const sinceRunIdx = header.findIndex(h => h.toLowerCase().includes('since'));
+            const tempIdx     = header.findIndex(h => h.toLowerCase().includes('temp'));
+            const powerIdx    = header.findIndex(h => h.toLowerCase().includes('power'));
 
-            if (tsIdx === -1 || runtimeIdx === -1 || sinceRunIdx === -1 || tempIdx === -1) {
-                console.error("DEBUG: Could not find required columns in Sump Pump CSV header:", header);
-                historicalStatusDiv.textContent += " Error: Sump CSV header mismatch.";
+            if ([tsIdx, runtimeIdx, sinceRunIdx, tempIdx, powerIdx].includes(-1)) {
+                console.error("DEBUG: Could not find one or more required Sump columns in header:", header);
                 return;
             }
+
+            // Clear old data
+            sumpTimeHistory.length = 0;
+            sumpTempHistory.length = 0;
+            sumpPowerHistory.length = 0;
+            sumpRuntimeHistory.length = 0;
+            sumpSinceRunHistory.length = 0;
 
             const now = new Date();
-            const startTime = new Date(now.getTime() - rangeHours * 60 * 60 * 1000);
-
-            let newSumpTimeHistory = [];
-            let newSumpTempHistory = [];
-            let newSumpRuntimeHistory = [];
-            let newSumpSinceRunHistory = [];
 
             lines.forEach(line => {
-                const values = line.split(',');
-                if (values.length > Math.max(tsIdx, runtimeIdx, sinceRunIdx, tempIdx)) {
-                    const timestamp = new Date(values[tsIdx].trim());
-                    if (timestamp >= startTime && timestamp <= now) {
-                        newSumpTimeHistory.push(timestamp);
-                        newSumpTempHistory.push(parseFloat(values[tempIdx]));
-                        newSumpRuntimeHistory.push(parseFloat(values[runtimeIdx]));
-                        newSumpSinceRunHistory.push(parseFloat(values[sinceRunIdx]));
-                    }
-                }
+                const cols = line.split(',');
+                const ts = new Date(cols[tsIdx]);
+
+                if (isNaN(ts.getTime())) return;
+
+                const diffHours = (now - ts) / (1000 * 60 * 60);
+                if (diffHours > rangeHours) return;
+
+                sumpTimeHistory.push(ts);
+                sumpTempHistory.push(parseFloat(cols[tempIdx]));
+                sumpPowerHistory.push(parseFloat(cols[powerIdx]));
+                sumpRuntimeHistory.push(parseFloat(cols[runtimeIdx]));
+                sumpSinceRunHistory.push(parseFloat(cols[sinceRunIdx]));
             });
 
-            // Update live history arrays for Sump charts
-            sumpTimeHistory = newSumpTimeHistory;
-            sumpTempHistory = newSumpTempHistory;
-            sumpRuntimeHistory = newSumpRuntimeHistory;
-            sumpSinceRunHistory = newSumpSinceRunHistory;
+            console.log(`DEBUG: Loaded ${sumpTimeHistory.length} sump points.`);
 
-            if (sumpTempChartInstance) { sumpTempChartInstance.data.labels = sumpTimeHistory; sumpTempChartInstance.data.datasets[0].data = sumpTempHistory; sumpTempChartInstance.update(); }
-            if (sumpRuntimeChartInstance) { sumpRuntimeChartInstance.data.labels = sumpTimeHistory; sumpRuntimeChartInstance.data.datasets[0].data = sumpRuntimeHistory; sumpRuntimeChartInstance.update(); }
-            if (sumpSinceRunChartInstance) { sumpSinceRunChartInstance.data.labels = sumpTimeHistory; sumpSinceRunChartInstance.data.datasets[0].data = sumpSinceRunHistory; sumpSinceRunChartInstance.update(); }
-            // sumpPowerChartInstance is not updated with historical data per request.
-
-            historicalStatusDiv.textContent += ` Loaded Sump history for last ${rangeHours} hours.`;
-            if (newSumpTimeHistory.length === 0) {
-                historicalStatusDiv.textContent += " (No Sump data in range)";
+            // Update charts
+            if (sumpTempChartInstance) {
+                sumpTempChartInstance.data.labels = sumpTimeHistory;
+                sumpTempChartInstance.data.datasets[0].data = sumpTempHistory;
+                sumpTempChartInstance.update();
             }
-
+            if (sumpPowerChartInstance) {
+                sumpPowerChartInstance.data.labels = sumpTimeHistory;
+                sumpPowerChartInstance.data.datasets[0].data = sumpPowerHistory;
+                sumpPowerChartInstance.update();
+            }
+            if (sumpRuntimeChartInstance) {
+                sumpRuntimeChartInstance.data.labels = sumpTimeHistory;
+                sumpRuntimeChartInstance.data.datasets[0].data = sumpRuntimeHistory;
+                sumpRuntimeChartInstance.update();
+            }
+            if (sumpSinceRunChartInstance) {
+                sumpSinceRunChartInstance.data.labels = sumpTimeHistory;
+                sumpSinceRunChartInstance.data.datasets[0].data = sumpSinceRunHistory;
+                sumpSinceRunChartInstance.update();
+            }
         })
         .catch(error => {
-            console.error("DEBUG: Failed to load Sump Pump CSV data:", error);
-            historicalStatusDiv.textContent += " Failed to load Sump historical data.";
+            console.error("DEBUG: Failed to fetch sump history:", error);
         });
 }
-
 
 
 // --- Function to Connect to Temp Monitor SSE ---
