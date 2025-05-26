@@ -2,56 +2,140 @@
 // Loaded from config.js
 
 // --- Get HTML Element References ---
-// ... (keep existing element references) ...
+// Temp Monitor Elements
+const tempMonitorStatusElement = document.getElementById('temp-monitor-status');
+const liveFridgeElement = document.getElementById('live-fridge');
+const liveFreezerElement = document.getElementById('live-freezer');
+const liveGarageElement = document.getElementById('live-garage');
+const tempMonitorLastUpdatedElement = document.getElementById('temp-monitor-last-updated');
+const liveHeaterValueElement = document.getElementById('live-heater-value');
+const liveHeaterStatusElement = document.getElementById('live-heater-status');
+
+// Sump Monitor Elements
+const sumpMonitorStatusElement = document.getElementById('sump-monitor-status');
+const sumpTempElement = document.getElementById('sump-temp');
+const sumpPowerElement = document.getElementById('sump-power');
+const sumpRuntimeElement = document.getElementById('sump-runtime');
+const sumpSinceRunElement = document.getElementById('sump-since-run');
+const sumpMonitorLastUpdatedElement = document.getElementById('sump-monitor-last-updated');
 
 // --- Data Storage ---
-// Temp Monitor Live Data History (for charts)
 let timeHistory = [];
 let fridgeHistory = [];
 let freezerHistory = [];
 let garageHistory = [];
 
-// Sump Monitor Live Data History (for charts)
 let sumpTimeHistory = [];
 let sumpTempHistory = [];
 let sumpPowerHistory = [];
 let sumpRuntimeHistory = [];
 let sumpSinceRunHistory = [];
 
-// --- Chart Initialization ---
-// ... (keep existing chart instance variables: fridgeChartInstance, ..., sumpSinceRunChartInstance) ...
-// ... (keep createChart function as is) ...
+// --- Chart Instance Variables ---
+let fridgeChartInstance, freezerChartInstance, garageChartInstance;
+let sumpTempChartInstance, sumpPowerChartInstance, sumpRuntimeChartInstance, sumpSinceRunChartInstance;
 
-// --- Helper function to parse CSV data ---
-function parseCSV(csvText) {
-    // Basic CSV parser: splits by lines, then by commas
-    // Assumes no commas within quoted fields for simplicity here
-    const lines = csvText.trim().split('\\n');
-    const header = lines.shift().split(','); // Assuming first line is header
-    return lines.map(line => {
-        const values = line.split(',');
-        // Skip empty lines or lines that don't have enough values
-        if (values.length < header.length || values.every(v => v.trim() === '')) {
-            return null;
+// *******************************************************************
+// *** MOVE createChart FUNCTION DEFINITION HERE (BEFORE DOMContentLoaded) ***
+// *******************************************************************
+function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)') {
+    const canvasElement = document.getElementById(canvasId);
+    if (!canvasElement) {
+        console.error(`DEBUG: Canvas element with ID '${canvasId}' not found!`);
+        return null;
+    }
+    const ctx = canvasElement.getContext('2d');
+    if (!ctx) {
+        console.error(`DEBUG: Failed to get 2D context for canvas ID '${canvasId}'!`);
+        return null;
+    }
+    console.log(`DEBUG: Creating chart for canvas ID '${canvasId}'`);
+    return new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: label,
+                data: [],
+                borderColor: borderColor,
+                borderWidth: 2,
+                fill: false,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        tooltipFormat: 'h:mm a', // Simplified tooltip
+                        displayFormats: {
+                            millisecond: 'h:mm:ss.SSS a',
+                            second: 'h:mm:ss a',
+                            minute: 'h:mm a',
+                            hour: 'h a',
+                            day: 'MMM d',
+                            week: 'll',
+                            month: 'MMM yyyy',
+                            quarter: 'qqq - yyyy',
+                            year: 'yyyy'
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Time'
+                    }
+                },
+                y: {
+                    beginAtZero: false,
+                    title: {
+                        display: true,
+                        text: yLabel
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true
+                },
+                zoom: { // Ensure zoom options are here if you are using the zoom plugin
+                    pan: {
+                        enabled: true,
+                        mode: 'x'
+                    },
+                    zoom: {
+                        wheel: {
+                            enabled: true,
+                        },
+                        pinch: {
+                            enabled: true
+                        },
+                        mode: 'x',
+                    }
+                }
+            }
         }
-        let rowData = {};
-        header.forEach((colName, index) => {
-            rowData[colName.trim()] = values[index] ? values[index].trim() : null;
-        });
-        return rowData;
-    }).filter(row => row !== null); // Filter out any null rows
+    });
 }
-
 
 // --- Initialize Charts and Load Initial Data ---
 document.addEventListener('DOMContentLoaded', () => {
     console.log("DEBUG: DOM loaded, initializing charts.");
-    // ... (keep config variable check) ...
+    if (typeof TEMP_MONITOR_DEVICE_ID === 'undefined' || typeof GOOGLE_APPS_SCRIPT_URL === 'undefined') {
+        console.error("DEBUG: Configuration variables from config.js seem to be missing!");
+        tempMonitorStatusElement.textContent = "Config Error!";
+        tempMonitorStatusElement.style.color = 'red';
+        sumpMonitorStatusElement.textContent = "Config Error!";
+        sumpMonitorStatusElement.style.color = 'red';
+        return;
+    }
 
     // Initialize all charts
     fridgeChartInstance = createChart('fridgeChart', 'Fridge Temp (°F)', 'rgb(255, 99, 132)');
-    // ... (initialize other temp monitor charts: freezerChartInstance, garageChartInstance) ...
-
+    freezerChartInstance = createChart('freezerChart', 'Freezer Temp (°F)', 'rgb(54, 162, 235)');
+    garageChartInstance = createChart('garageChart', 'Garage Temp (°F)', 'rgb(75, 192, 192)');
     sumpTempChartInstance = createChart('sumpTempChart', 'Sump Temperature (°F)', 'rgb(255, 206, 86)');
     sumpPowerChartInstance = createChart('sumpPowerChart', 'External Power (V)', 'rgb(153, 102, 255)', 'Voltage (V)');
     sumpRuntimeChartInstance = createChart('sumpRuntimeChart', 'Sump Runtime (sec)', 'rgb(255, 159, 64)', 'Runtime (seconds)');
@@ -64,9 +148,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load initial historical data based on default dropdown selection
     const initialHours = parseInt(document.getElementById('history-range').value, 10);
-    fetchTempMonitorHistoricalData(initialHours); // Renamed function
-    fetchSumpHistoricalData(initialHours);      // New function
+    fetchTempMonitorHistoricalData(initialHours);
+    fetchSumpHistoricalData(initialHours);
 });
+
+// ... (rest of your script.js: history-range listener, resetZoomOnAllCharts, fetch functions, SSE connection functions) ...
 
 // --- Event Listener for History Range Dropdown ---
 document.getElementById('history-range').addEventListener('change', function() {
