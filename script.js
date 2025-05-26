@@ -266,7 +266,7 @@ function fetchTempMonitorHistoricalData(rangeHours) {
 // --- Fetch Historical Data for Sump Pump ---
 function fetchSumpHistoricalData(rangeHours) {
     const historicalStatusDiv = document.getElementById('historical-chart-container-gsheets'); // Or a dedicated status div for sump
-    console.log("DEBUG: Sump CSV header:", header);
+
     console.log(`DEBUG: Fetching Sump Pump historical data for last ${rangeHours} hours.`);
     
     if (!SUMP_HISTORY_CSV_URL || SUMP_HISTORY_CSV_URL.includes("YOUR_") ) {
@@ -288,7 +288,7 @@ function fetchSumpHistoricalData(rangeHours) {
                 return;
             }
             const header = lines.shift().split(',');
-
+    console.log("DEBUG: Sump CSV header:", header);
 
             // Based on your SumpPump - SumpRunData.csv
             // Find column indices - more robust than fixed indices
