@@ -503,69 +503,70 @@ function connectSumpMonitorSSE() {
 }
 
 function fetchHistoricalDataFromSheets(rangeHours = 1) {
-    
-        fetch(CSV_URL)
-        .then(response => response.text())
-        .then(csv => {
-            const now = new Date();
-            const lines = csv.split('\n').slice(1); // Skip header
+    console.log(`DEBUG: Fetching Temp Monitor historical data for last ${rangeHours} hours.`);
 
-            // Clear history arrays
+    if (!CSV_URL || CSV_URL.includes("YOUR_")) {
+        console.error("DEBUG: CSV_URL not set or still a placeholder.");
+        return;
+    }
+
+    fetch(CSV_URL)
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response.text();
+        })
+        .then(csvText => {
+            const lines = csvText.trim().split('\n');
+            if (lines.length <= 1) {
+                console.warn("DEBUG: CSV has no data rows.");
+                return;
+            }
+
+            const now = new Date();
+
+            // Clear existing history
             timeHistory.length = 0;
             fridgeHistory.length = 0;
             freezerHistory.length = 0;
             garageHistory.length = 0;
 
-            lines.forEach(line => {
-                const [timestamp, garage, freezer, fridge] = line.split(',');
+            // Process rows
+            lines.slice(1).forEach(line => {
+                const cols = line.split(',');
+                const timestamp = cols[0];
                 const ts = new Date(timestamp);
+                if (isNaN(ts.getTime())) return;
 
-                // Filter rows outside the selected range
                 const diffHours = (now - ts) / (1000 * 60 * 60);
                 if (diffHours > rangeHours) return;
 
                 timeHistory.push(ts);
-                fridgeHistory.push(parseFloat(fridge));
-                freezerHistory.push(parseFloat(freezer));
-                garageHistory.push(parseFloat(garage));
+                garageHistory.push(parseFloat(cols[1]));   // GarageTemp
+                freezerHistory.push(parseFloat(cols[2]));  // FreezerTemp
+                fridgeHistory.push(parseFloat(cols[3]));   // FridgeTemp
             });
 
-            // Trim
-            if (timeHistory.length > MAX_HISTORY_POINTS) {
-                const excess = timeHistory.length - MAX_HISTORY_POINTS;
-                timeHistory.splice(0, excess);
-                fridgeHistory.splice(0, excess);
-                freezerHistory.splice(0, excess);
-                garageHistory.splice(0, excess);
-            }
+            console.log(`DEBUG: Parsed ${timeHistory.length} rows of fridge/freezer/garage history.`);
 
             if (fridgeChartInstance) {
                 fridgeChartInstance.data.labels = timeHistory;
                 fridgeChartInstance.data.datasets[0].data = fridgeHistory;
-                console.log("Fridge chart range:", timeHistory[0], "to", timeHistory[timeHistory.length - 1]);
-                fridgeChartInstance.options.scales.x.min = timeHistory[0];
-                fridgeChartInstance.options.scales.x.max = timeHistory[timeHistory.length - 1];
                 fridgeChartInstance.update();
             }
             if (freezerChartInstance) {
                 freezerChartInstance.data.labels = timeHistory;
                 freezerChartInstance.data.datasets[0].data = freezerHistory;
-                freezerChartInstance.options.scales.x.min = timeHistory[0];
-                freezerChartInstance.options.scales.x.max = timeHistory[timeHistory.length - 1];
                 freezerChartInstance.update();
             }
             if (garageChartInstance) {
                 garageChartInstance.data.labels = timeHistory;
                 garageChartInstance.data.datasets[0].data = garageHistory;
-                garageChartInstance.options.scales.x.min = timeHistory[0];
-                garageChartInstance.options.scales.x.max = timeHistory[timeHistory.length - 1];
                 garageChartInstance.update();
             }
-
-            document.getElementById('historical-chart-container-gsheets').textContent = `Loaded last ${rangeHours} hours of data.`;
         })
-        .catch(error => {
-            console.error("Failed to load CSV data:", error);
-            document.getElementById('historical-chart-container-gsheets').textContent = "Failed to load historical data.";
+        .catch(err => {
+            console.error("DEBUG: Failed to fetch historical temp data:", err);
         });
 }
+
+  
