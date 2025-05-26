@@ -123,7 +123,7 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
 // --- Initialize Charts and Load Initial Data ---
 document.addEventListener('DOMContentLoaded', () => {
     console.log("DEBUG: DOM loaded, initializing charts.");
-    if (typeof TEMP_MONITOR_DEVICE_ID === 'undefined' || typeof GOOGLE_APPS_SCRIPT_URL === 'undefined') {
+    if (typeof TEMP_MONITOR_DEVICE_ID === 'undefined' || typeof TEMP_MONITOR_HISTORY_CSV_URL === 'undefined') {
         console.error("DEBUG: Configuration variables from config.js seem to be missing!");
         tempMonitorStatusElement.textContent = "Config Error!";
         tempMonitorStatusElement.style.color = 'red';
@@ -294,7 +294,7 @@ function fetchSumpHistoricalData(rangeHours) {
             const tsIdx = header.findIndex(h => h.trim().toLowerCase().includes('Timestamp')); // Column A
             const runtimeIdx = header.findIndex(h => h.trim().toLowerCase().includes('SumpRunTime')); // Column C
             const sinceRunIdx = header.findIndex(h => h.trim().toLowerCase().includes('TimeSinceLastRun')); // Column D
-            const tempIdx = header.findIndex(h => h.trim().toLowerCase().includes('Temperature' // Column F
+            const tempIdx = header.findIndex(h => h.trim().toLowerCase().includes('Temperature')); // Column F
 
             if (tsIdx === -1 || runtimeIdx === -1 || sinceRunIdx === -1 || tempIdx === -1) {
                 console.error("DEBUG: Could not find required columns in Sump Pump CSV header:", header);
