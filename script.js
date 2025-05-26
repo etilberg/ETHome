@@ -288,13 +288,12 @@ function fetchSumpHistoricalData(rangeHours) {
             console.log("DEBUG: Sump CSV Header:", header);
 
             // Flexible column detection
-            const tsIdx       = header.findIndex(h => h.toLowerCase().includes('timestamp'));
-            const runtimeIdx  = header.findIndex(h => h.toLowerCase().includes('runtime'));
-            const sinceRunIdx = header.findIndex(h => h.toLowerCase().includes('since'));
-            const tempIdx     = header.findIndex(h => h.toLowerCase().includes('temp'));
-            const powerIdx    = header.findIndex(h => h.toLowerCase().includes('power'));
+            const tsIdx       = header.findIndex(h => h.toLowerCase().includes('Timestamp'));
+            const runtimeIdx  = header.findIndex(h => h.toLowerCase().includes('SumpRunTime'));
+            const sinceRunIdx = header.findIndex(h => h.toLowerCase().includes('TimeSinceLastRun'));
+            const tempIdx     = header.findIndex(h => h.toLowerCase().includes('Temperature'));
 
-            if ([tsIdx, runtimeIdx, sinceRunIdx, tempIdx, powerIdx].includes(-1)) {
+            if ([tsIdx, runtimeIdx, sinceRunIdx, tempIdx].includes(-1)) {
                 console.error("DEBUG: Could not find one or more required Sump columns in header:", header);
                 return;
             }
@@ -319,7 +318,6 @@ function fetchSumpHistoricalData(rangeHours) {
 
                 sumpTimeHistory.push(ts);
                 sumpTempHistory.push(parseFloat(cols[tempIdx]));
-                sumpPowerHistory.push(parseFloat(cols[powerIdx]));
                 sumpRuntimeHistory.push(parseFloat(cols[runtimeIdx]));
                 sumpSinceRunHistory.push(parseFloat(cols[sinceRunIdx]));
             });
