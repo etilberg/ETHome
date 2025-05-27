@@ -177,72 +177,58 @@ function resetZoomOnAllCharts() {
 
 
 // --- Fetch Historical Data for Temp Monitor ---
-function fetchTempMonitorHistoricalData(rangeHours) {
+function fetchTempMonitorHistoricalData(rangeHours = 1) {
     console.log(`DEBUG: Fetching Temp Monitor historical data for last ${rangeHours} hours.`);
-    const historicalStatusDiv = document.getElementById('historical-chart-container-gsheets'); // Use a more general status div or create specific ones
 
-    if (!TEMP_MONITOR_HISTORY_CSV_URL || TEMP_MONITOR_HISTORY_CSV_URL.includes("YOUR_") ) {
-        console.error("DEBUG: TEMP_MONITOR_HISTORY_CSV_URL is not defined or is a placeholder in config.js!");
-        historicalStatusDiv.textContent = "Error: Temp Monitor History URL not configured.";
+    if (!TEMP_MONITOR_HISTORY_CSV_URL || TEMP_MONITOR_HISTORY_CSV_URL.includes("YOUR_")) {
+        console.error("DEBUG: TEMP_MONITOR_HISTORY_CSV_URL is not set or still a placeholder.");
         return;
     }
-    historicalStatusDiv.textContent = `Loading Temp Monitor history (${rangeHours}h)...`;
 
     fetch(TEMP_MONITOR_HISTORY_CSV_URL)
         .then(response => {
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for Temp Monitor History`);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             return response.text();
         })
         .then(csvText => {
-            const lines = csvText.trim().split('\\n');
-            if (lines.length <= 1) { // Only header or empty
-                historicalStatusDiv.textContent = `No historical Temp Monitor data found.`;
-                return;
-            }
-            const header = lines.shift().split(','); // Assuming first line is header
-            console.log("DEBUG: Temp CSV Header:", header);
-
-            // Find column indices - more robust than fixed indices
-            const tsIdx = header.findIndex(h => h.trim().toLowerCase().includes('timestamp')); // Or your exact timestamp column name
-            const fridgeIdx = header.findIndex(h => h.trim().toLowerCase().includes('fridge')); // Or your exact fridge column name
-            const freezerIdx = header.findIndex(h => h.trim().toLowerCase().includes('freezer'));
-            const garageIdx = header.findIndex(h => h.trim().toLowerCase().includes('garage'));
-
-            if (tsIdx === -1 || fridgeIdx === -1 || freezerIdx === -1 || garageIdx === -1) {
-                console.error("DEBUG: Could not find required columns in Temp Monitor CSV header:", header);
-                historicalStatusDiv.textContent = "Error: Temp Monitor CSV header mismatch.";
+            const lines = csvText.trim().split('\n');
+            if (lines.length <= 1) {
+                console.warn("DEBUG: Temp CSV has no data rows.");
                 return;
             }
 
             const now = new Date();
-            const startTime = new Date(now.getTime() - rangeHours * 60 * 60 * 1000);
 
-            let newTimeHistory = [];
-            let newFridgeHistory = [];
-            let newFreezerHistory = [];
-            let newGarageHistory = [];
+            // Clear existing history arrays
+            timeHistory.length = 0;
+            fridgeHistory.length = 0;
+            freezerHistory.length = 0;
+            garageHistory.length = 0;
 
-            lines.forEach(line => {
-                const values = line.split(',');
-                if (values.length > Math.max(tsIdx, fridgeIdx, freezerIdx, garageIdx)) {
-                    const timestamp = new Date(values[tsIdx].trim());
-                    if (timestamp >= startTime && timestamp <= now) {
-                        newTimeHistory.push(timestamp);
-                        newFridgeHistory.push(parseFloat(values[fridgeIdx]));
-                        newFreezerHistory.push(parseFloat(values[freezerIdx]));
-                        newGarageHistory.push(parseFloat(values[garageIdx]));
-                    }
-                }
+            let lastHeaterRunTime = null;
+            let lastHeaterStatus = null;
+
+            // Parse CSV rows
+            lines.slice(1).forEach(line => {
+                const cols = line.split(',');
+                const ts = new Date(cols[0]);
+
+                if (isNaN(ts.getTime())) return;
+
+                const diffHours = (now - ts) / (1000 * 60 * 60);
+                if (diffHours > rangeHours) return;
+
+                timeHistory.push(ts);
+                garageHistory.push(parseFloat(cols[1]));   // GarageTemp
+                freezerHistory.push(parseFloat(cols[2]));  // FreezerTemp
+                fridgeHistory.push(parseFloat(cols[3]));   // FridgeTemp
+
+                lastHeaterRunTime = parseFloat(cols[4]);
+                lastHeaterStatus = parseInt(cols[5]);
             });
-            
-            // Update live history arrays (which are used by live updates)
-            // This will replace current live history with fetched historical
-            timeHistory = newTimeHistory;
-            fridgeHistory = newFridgeHistory;
-            freezerHistory = newFreezerHistory;
-            garageHistory = newGarageHistory;
 
-            // ... (update freezerChartInstance and garageChartInstance similarly) ...
+            console.log(`DEBUG: Loaded ${timeHistory.length} points of fridge/freezer/garage history.`);
+
             if (fridgeChartInstance) {
                 fridgeChartInstance.data.labels = timeHistory;
                 fridgeChartInstance.data.datasets[0].data = fridgeHistory;
@@ -258,15 +244,17 @@ function fetchTempMonitorHistoricalData(rangeHours) {
                 garageChartInstance.data.datasets[0].data = garageHistory;
                 garageChartInstance.update();
             }
-            
-            historicalStatusDiv.textContent = `Loaded Temp Monitor history for last ${rangeHours} hours.`;
-            if (newTimeHistory.length === 0) {
-                historicalStatusDiv.textContent += " (No data in range)";
+
+            // Update heater live display with last values in range
+            if (lastHeaterRunTime !== null && liveHeaterValueElement) {
+                liveHeaterValueElement.textContent = lastHeaterRunTime.toFixed(2);
+            }
+            if (lastHeaterStatus !== null && liveHeaterStatusElement) {
+                liveHeaterStatusElement.textContent = lastHeaterStatus === 1 ? "On" : "Off";
             }
         })
-        .catch(error => {
-            console.error("DEBUG: Failed to load Temp Monitor CSV data:", error);
-            historicalStatusDiv.textContent = "Failed to load Temp Monitor historical data.";
+        .catch(err => {
+            console.error("DEBUG: Failed to fetch historical temp data:", err);
         });
 }
 
@@ -508,72 +496,4 @@ function connectSumpMonitorSSE() {
         sumpMonitorStatusElement.style.color = 'red';
     };
 }
-/*
-function fetchHistoricalDataFromSheets(rangeHours = 1) {
-    console.log(`DEBUG: Fetching Temp Monitor historical data for last ${rangeHours} hours.`);
 
-    if (!CSV_URL || CSV_URL.includes("YOUR_")) {
-        console.error("DEBUG: CSV_URL not set or still a placeholder.");
-        return;
-    }
-
-    fetch(CSV_URL)
-        .then(response => {
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            return response.text();
-        })
-        .then(csvText => {
-            const lines = csvText.trim().split('\n');
-            if (lines.length <= 1) {
-                console.warn("DEBUG: CSV has no data rows.");
-                return;
-            }
-
-            const now = new Date();
-
-            // Clear existing history
-            timeHistory.length = 0;
-            fridgeHistory.length = 0;
-            freezerHistory.length = 0;
-            garageHistory.length = 0;
-
-            // Process rows
-            lines.slice(1).forEach(line => {
-                const cols = line.split(',');
-                const timestamp = cols[0];
-                const ts = new Date(timestamp);
-                if (isNaN(ts.getTime())) return;
-
-                const diffHours = (now - ts) / (1000 * 60 * 60);
-                if (diffHours > rangeHours) return;
-
-                timeHistory.push(ts);
-                garageHistory.push(parseFloat(cols[1]));   // GarageTemp
-                freezerHistory.push(parseFloat(cols[2]));  // FreezerTemp
-                fridgeHistory.push(parseFloat(cols[3]));   // FridgeTemp
-            });
-
-            console.log(`DEBUG: Parsed ${timeHistory.length} rows of fridge/freezer/garage history.`);
-
-            if (fridgeChartInstance) {
-                fridgeChartInstance.data.labels = timeHistory;
-                fridgeChartInstance.data.datasets[0].data = fridgeHistory;
-                fridgeChartInstance.update();
-            }
-            if (freezerChartInstance) {
-                freezerChartInstance.data.labels = timeHistory;
-                freezerChartInstance.data.datasets[0].data = freezerHistory;
-                freezerChartInstance.update();
-            }
-            if (garageChartInstance) {
-                garageChartInstance.data.labels = timeHistory;
-                garageChartInstance.data.datasets[0].data = garageHistory;
-                garageChartInstance.update();
-            }
-        })
-        .catch(err => {
-            console.error("DEBUG: Failed to fetch historical temp data:", err);
-        });
-}
-*/
-  
