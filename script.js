@@ -145,7 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 yAxisID: 'y2',
                 stepped: true,
                 borderWidth: 2,
-                fill: "origin"
+                fill: 'origin'
             });
         
             fridgeChartInstance.options.scales.y2 = {
