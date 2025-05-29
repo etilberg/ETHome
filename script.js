@@ -257,7 +257,7 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
                 freezerHistory.push(parseFloat(cols[2]));  // FreezerTemp
                 fridgeHistory.push(parseFloat(cols[3]));   // FridgeTemp
                 lastHeaterRunTime = parseFloat(cols[4]);
-                heaterStatusHistory.push(parseInt(cols[5])); // HeaterStatus (0 or 1)lastHeaterStatus = parseInt(cols[5]);
+                heaterStatusHistory.push(parseInt(cols[5].trim().replace('\r', ''))); // HeaterStatus (0 or 1)lastHeaterStatus = parseInt(cols[5]);
             });
 
             console.log(`DEBUG: Loaded ${timeHistory.length} points of fridge/freezer/garage history.`);
