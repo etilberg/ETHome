@@ -140,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fridgeChartInstance.data.datasets.push({
                 label: 'Heater Status',
                 data: heaterStatusHistory,
-                borderColor: 'rgb(125, 75, 0)',
+                borderColor: 'rgb(125, 75, 0.5)',
                 backgroundColor: 'rgba(125, 75, 0, 0.1)',
                 yAxisID: 'y2',
                 stepped: true,
