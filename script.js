@@ -141,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 label: 'Heater Status',
                 data: heaterStatusHistory,
                 borderColor: 'rgb(255, 165, 0)',
-                backgroundColor: 'rgba(150, 100, 0, 0.1)',
+                backgroundColor: 'rgba(125, 75, 0, 0.1)',
                 yAxisID: 'y2',
                 stepped: true,
                 borderWidth: 2,
