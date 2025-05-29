@@ -24,6 +24,7 @@ let timeHistory = [];
 let fridgeHistory = [];
 let freezerHistory = [];
 let garageHistory = [];
+let heaterStatusHistory = [];
 
 let sumpTimeHistory = [];
 let sumpTempHistory = [];
@@ -134,6 +135,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize all charts
     fridgeChartInstance = createChart('fridgeChart', 'Fridge Temp (°F)', 'rgb(255, 99, 132)');
+        // Add HeaterStatus dataset to fridge chart
+        if (fridgeChartInstance) {
+            fridgeChartInstance.data.datasets.push({
+                label: 'Heater Status',
+                data: heaterStatusHistory,
+                borderColor: 'rgb(255, 165, 0)',
+                backgroundColor: 'rgba(255, 165, 0, 0.3)',
+                yAxisID: 'y2',
+                stepped: true,
+                borderWidth: 2,
+                fill: origin
+            });
+        
+            fridgeChartInstance.options.scales.y2 = {
+                position: 'right',
+                title: {
+                    display: true,
+                    text: 'Heater Status'
+                },
+                min: 0,
+                max: 1,
+                ticks: {
+                    stepSize: 1
+                },
+                grid: {
+                    drawOnChartArea: false
+                }
+            };
+        
+            fridgeChartInstance.update();
+        }
     freezerChartInstance = createChart('freezerChart', 'Freezer Temp (°F)', 'rgb(54, 162, 235)');
     garageChartInstance = createChart('garageChart', 'Garage Temp (°F)', 'rgb(75, 192, 192)');
     sumpTempChartInstance = createChart('sumpTempChart', 'Sump Temperature (°F)', 'rgb(255, 206, 86)');
@@ -204,6 +236,8 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
             fridgeHistory.length = 0;
             freezerHistory.length = 0;
             garageHistory.length = 0;
+            heaterStatusHistory.length = 0;
+
 
             let lastHeaterRunTime = null;
             let lastHeaterStatus = null;
@@ -222,16 +256,16 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
                 garageHistory.push(parseFloat(cols[1]));   // GarageTemp
                 freezerHistory.push(parseFloat(cols[2]));  // FreezerTemp
                 fridgeHistory.push(parseFloat(cols[3]));   // FridgeTemp
-
                 lastHeaterRunTime = parseFloat(cols[4]);
-                lastHeaterStatus = parseInt(cols[5]);
+                heaterStatusHistory.push(parseInt(cols[5])); // HeaterStatus (0 or 1)lastHeaterStatus = parseInt(cols[5]);
             });
 
             console.log(`DEBUG: Loaded ${timeHistory.length} points of fridge/freezer/garage history.`);
 
             if (fridgeChartInstance) {
                 fridgeChartInstance.data.labels = timeHistory;
-                fridgeChartInstance.data.datasets[0].data = fridgeHistory;
+                fridgeChartInstance.data.datasets[0].data = fridgeHistory;        //fridge temperature
+                fridgeChartInstance.data.datasets[1].data = heaterStatusHistory;    // Heater On/Off
                 fridgeChartInstance.update();
             }
             if (freezerChartInstance) {
@@ -244,6 +278,8 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
                 garageChartInstance.data.datasets[0].data = garageHistory;
                 garageChartInstance.update();
             }
+
+
 
             // Update heater live display with last values in range
             if (lastHeaterRunTime !== null && liveHeaterValueElement) {
