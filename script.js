@@ -303,14 +303,6 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
         });
 }
 
-//  ---MIN/MAX ---
-const fridgeMinMax = calculateMinMax(fridgeHistory);
-const freezerMinMax = calculateMinMax(freezerHistory);
-const garageMinMax = calculateMinMax(garageHistory);
-document.getElementById('fridge-stats').textContent = `24h High: ${fridgeMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${fridgeMinMax.min?.toFixed(1) ?? '--'}°F`;
-document.getElementById('freezer-stats').textContent = `24h High: ${freezerMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${freezerMinMax.min?.toFixed(1) ?? '--'}°F`;
-document.getElementById('garage-stats').textContent = `24h High: ${garageMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${garageMinMax.min?.toFixed(1) ?? '--'}°F`;
-
 // --- Fetch Historical Data for Sump Pump ---
 function fetchSumpHistoricalData(rangeHours) {
     console.log(`DEBUG: Fetching Sump Pump historical data for last ${rangeHours} hours.`);
@@ -477,6 +469,14 @@ function connectTempMonitorSSE() {
         tempMonitorStatusElement.style.color = 'red';
     };
 }
+
+//  ---MIN/MAX ---
+const fridgeMinMax = calculateMinMax(fridgeHistory);
+const freezerMinMax = calculateMinMax(freezerHistory);
+const garageMinMax = calculateMinMax(garageHistory);
+document.getElementById('fridge-stats').textContent = `24h High: ${fridgeMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${fridgeMinMax.min?.toFixed(1) ?? '--'}°F`;
+document.getElementById('freezer-stats').textContent = `24h High: ${freezerMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${freezerMinMax.min?.toFixed(1) ?? '--'}°F`;
+document.getElementById('garage-stats').textContent = `24h High: ${garageMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${garageMinMax.min?.toFixed(1) ?? '--'}°F`;
 
 
 // --- Function to Connect to Sump Monitor SSE ---
