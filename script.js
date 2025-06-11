@@ -582,9 +582,12 @@ async function fetchOutdoorTemperatureHistory(rangeHours = 24) {
     const start = new Date(now.getTime() - rangeHours * 60 * 60 * 1000);
 
     const startDate = start.toISOString().split('T')[0];
-    const endDate = now.toISOString().split('T')[0];
+    // ⚠️ Don't use today — use yesterday for archive data
+    const yesterday = new Date();
+    yesterday.setDate(now.getDate() - 1);
+    const endDate = yesterday.toISOString().split('T')[0];
 
-    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=44.925678&longitude=-97.101567&start_date=${startDate}&end_date=${endDate}&hourly=temperature_2m&timezone=auto`;
+  const url = `https://archive-api.open-meteo.com/v1/archive?latitude=35.2&longitude=-97.4&start_date=${startDate}&end_date=${endDate}&hourly=temperature_2m&timezone=auto`;
 
     console.log("DEBUG: Fetching outdoor temps from:", url);
 
@@ -596,7 +599,8 @@ async function fetchOutdoorTemperatureHistory(rangeHours = 24) {
             console.error("DEBUG: Open-Meteo data missing expected fields:", data);
             return;
         }
-
+console.log("DEBUG: Open-Meteo raw response:", data);
+      
         // Convert Open-Meteo time strings to Date objects and match against your timeHistory
         outdoorTempHistory.length = 0;
 
