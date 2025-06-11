@@ -176,7 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fridgeChartInstance.update();
         }
     freezerChartInstance = createChart('freezerChart', 'Freezer Temp (°F)', 'rgb(54, 162, 235)');
-    garageChartInstance = createChart('garageChart', 'Garage Temp (°F)', 'rgb(75, 192, 192)'
+    garageChartInstance = createChart('garageChart', 'Garage Temp (°F)', 'rgb(75, 192, 192)');
           if (canvasId === 'garageChart') {
           chart.data.datasets.push({
               label: 'Outdoor Temp (°F)',
