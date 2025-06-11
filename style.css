@@ -57,6 +57,16 @@ section {
     font-size: 1.1em;
 }
 
+/*style for Min/Max*/
+#fridge-stats,
+#freezer-stats,
+#garage-stats {
+  font-size: 0.9em;
+  color: #444;
+  margin-bottom: 8px;
+}
+
+
 /* Status indicators within H2 */
 h2 span {
     font-style: italic;
