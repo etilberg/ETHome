@@ -66,10 +66,10 @@ section {
   margin-bottom: 8px;
 }
 .temp-high {
-  color: red;
+  color: red !important;
 }
 .temp-low {
-  color: blue;
+  color: blue !important;
 }
 
 
