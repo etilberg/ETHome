@@ -11,10 +11,6 @@ const tempMonitorLastUpdatedElement = document.getElementById('temp-monitor-last
 const liveHeaterValueElement = document.getElementById('live-heater-value');
 const liveHeaterStatusElement = document.getElementById('live-heater-status');
 
-const fridgeMinMax = calculateMinMax(fridgeHistory);
-const freezerMinMax = calculateMinMax(freezerHistory);
-const garageMinMax = calculateMinMax(garageHistory);
-
 // Sump Monitor Elements
 const sumpMonitorStatusElement = document.getElementById('sump-monitor-status');
 const sumpTempElement = document.getElementById('sump-temp');
@@ -205,6 +201,10 @@ document.getElementById('history-range').addEventListener('change', function() {
     fetchSumpHistoricalData(selectedHours);      // New function
 });
 
+//  ---MIN/MAX ---
+const fridgeMinMax = calculateMinMax(fridgeHistory);
+const freezerMinMax = calculateMinMax(freezerHistory);
+const garageMinMax = calculateMinMax(garageHistory);
 document.getElementById('fridge-stats').textContent = `24h High: ${fridgeMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${fridgeMinMax.min?.toFixed(1) ?? '--'}°F`;
 document.getElementById('freezer-stats').textContent = `24h High: ${freezerMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${freezerMinMax.min?.toFixed(1) ?? '--'}°F`;
 document.getElementById('garage-stats').textContent = `24h High: ${garageMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${garageMinMax.min?.toFixed(1) ?? '--'}°F`;
