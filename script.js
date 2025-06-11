@@ -177,17 +177,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     freezerChartInstance = createChart('freezerChart', 'Freezer Temp (°F)', 'rgb(54, 162, 235)');
     garageChartInstance = createChart('garageChart', 'Garage Temp (°F)', 'rgb(75, 192, 192)');
-          if (canvasId === 'garageChart') {
-          chart.data.datasets.push({
-              label: 'Outdoor Temp (°F)',
-              data: outdoorTempHistory,
-              borderColor: 'rgb(255, 99, 132)',
-              borderWidth: 2,
-              fill: false,
-              tension: 0.1,
-              yAxisID: 'y'
-          });
-}
+    // --- THIS IS THE CORRECTED LOGIC ---
+    // First, check if the garage chart was created successfully
+    if (garageChartInstance) {
+        // Then, push the new dataset to THAT specific chart instance
+        garageChartInstance.data.datasets.push({
+            label: 'Outdoor Temp (°F)',
+            data: outdoorTempHistory,
+            borderColor: 'rgb(255, 99, 132)', // A different color for the outdoor temp
+            borderWidth: 2,
+            fill: false,
+            tension: 0.1,
+            yAxisID: 'y' // Ensure this matches the garage chart's y-axis ID
+        });
+        // Update the chart to show the newly added data
+        garageChartInstance.update();
 );
     sumpTempChartInstance = createChart('sumpTempChart', 'Sump Temperature (°F)', 'rgb(255, 206, 86)');
     sumpPowerChartInstance = createChart('sumpPowerChart', 'External Power (V)', 'rgb(153, 102, 255)', 'Voltage (V)');
