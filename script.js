@@ -25,6 +25,7 @@ let fridgeHistory = [];
 let freezerHistory = [];
 let garageHistory = [];
 let heaterStatusHistory = [];
+let outdoorTempHistory = [];
 
 let sumpTimeHistory = [];
 let sumpTempHistory = [];
@@ -175,7 +176,19 @@ document.addEventListener('DOMContentLoaded', () => {
             fridgeChartInstance.update();
         }
     freezerChartInstance = createChart('freezerChart', 'Freezer Temp (°F)', 'rgb(54, 162, 235)');
-    garageChartInstance = createChart('garageChart', 'Garage Temp (°F)', 'rgb(75, 192, 192)');
+    garageChartInstance = createChart('garageChart', 'Garage Temp (°F)', 'rgb(75, 192, 192)'
+          if (canvasId === 'garageChart') {
+          chart.data.datasets.push({
+              label: 'Outdoor Temp (°F)',
+              data: outdoorTempHistory,
+              borderColor: 'rgb(255, 99, 132)',
+              borderWidth: 2,
+              fill: false,
+              tension: 0.1,
+              yAxisID: 'y'
+          });
+}
+);
     sumpTempChartInstance = createChart('sumpTempChart', 'Sump Temperature (°F)', 'rgb(255, 206, 86)');
     sumpPowerChartInstance = createChart('sumpPowerChart', 'External Power (V)', 'rgb(153, 102, 255)', 'Voltage (V)');
     sumpRuntimeChartInstance = createChart('sumpRuntimeChart', 'Sump Runtime (sec)', 'rgb(255, 159, 64)', 'Runtime (seconds)');
@@ -318,6 +331,7 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
         .catch(err => {
             console.error("DEBUG: Failed to fetch historical temp data:", err);
         });
+  fetchOutdoorTemperatureHistory(rangeHours);
 }
 
 // --- Fetch Historical Data for Sump Pump ---
@@ -557,4 +571,65 @@ function connectSumpMonitorSSE() {
         sumpMonitorStatusElement.style.color = 'red';
     };
 }
+
+
+async function fetchOutdoorTemperatureHistory(rangeHours = 24) {
+    const now = new Date();
+    const start = new Date(now.getTime() - rangeHours * 60 * 60 * 1000);
+
+    const startDate = start.toISOString().split('T')[0];
+    const endDate = now.toISOString().split('T')[0];
+
+    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=44.925678&longitude=-97.101567&start_date=${startDate}&end_date=${endDate}&hourly=temperature_2m&timezone=auto`;
+
+    console.log("DEBUG: Fetching outdoor temps from:", url);
+
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (!data.hourly || !data.hourly.time || !data.hourly.temperature_2m) {
+            console.error("DEBUG: Open-Meteo data missing expected fields:", data);
+            return;
+        }
+
+        // Convert Open-Meteo time strings to Date objects and match against your timeHistory
+        outdoorTempHistory.length = 0;
+
+        const openTimes = data.hourly.time.map(t => new Date(t));
+        const temps = data.hourly.temperature_2m;
+
+        // Match each timestamp in your existing garage data to nearest Open-Meteo reading
+        for (let i = 0; i < timeHistory.length; i++) {
+            const ts = timeHistory[i];
+
+            // Find the closest Open-Meteo timestamp
+            let closestIdx = 0;
+            let minDiff = Infinity;
+
+            for (let j = 0; j < openTimes.length; j++) {
+                const diff = Math.abs(openTimes[j] - ts);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    closestIdx = j;
+                }
+            }
+
+            outdoorTempHistory.push(temps[closestIdx]);
+        }
+
+        console.log("DEBUG: Outdoor temps matched to garage history:", outdoorTempHistory.length);
+
+        // Update chart
+        if (garageChartInstance && garageChartInstance.data.datasets[1]) {
+            garageChartInstance.data.datasets[1].data = outdoorTempHistory;
+            garageChartInstance.update();
+        }
+
+    } catch (err) {
+        console.error("DEBUG: Failed to fetch Open-Meteo data:", err);
+    }
+}
+
+
 
