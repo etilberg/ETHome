@@ -65,6 +65,12 @@ section {
   color: #444;
   margin-bottom: 8px;
 }
+.temp-high {
+  color: red;
+}
+.temp-low {
+  color: blue;
+}
 
 
 /* Status indicators within H2 */
