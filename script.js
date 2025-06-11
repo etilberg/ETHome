@@ -468,9 +468,7 @@ function connectTempMonitorSSE() {
         tempMonitorStatusElement.textContent = (err.target && err.target.readyState === EventSource.CLOSED) ? 'Conn. Closed' : "Conn. Error";
         tempMonitorStatusElement.style.color = 'red';
     };
-}
-
-//  ---MIN/MAX ---
+  //  ---MIN/MAX ---
 const fridgeMinMax = calculateMinMax(fridgeHistory);
 const freezerMinMax = calculateMinMax(freezerHistory);
 const garageMinMax = calculateMinMax(garageHistory);
@@ -479,6 +477,9 @@ document.getElementById('freezer-stats').textContent = `24h High: ${freezerMinMa
 document.getElementById('garage-stats').textContent = `24h High: ${garageMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${garageMinMax.min?.toFixed(1) ?? '--'}°F`;
 console.log("DEBUG: Fridge history:", fridgeHistory);
 console.log("DEBUG: Fridge min/max:", fridgeMinMax);
+}
+
+
 
 // --- Function to Connect to Sump Monitor SSE ---
 function connectSumpMonitorSSE() {
