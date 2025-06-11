@@ -477,7 +477,8 @@ const garageMinMax = calculateMinMax(garageHistory);
 document.getElementById('fridge-stats').textContent = `24h High: ${fridgeMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${fridgeMinMax.min?.toFixed(1) ?? '--'}°F`;
 document.getElementById('freezer-stats').textContent = `24h High: ${freezerMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${freezerMinMax.min?.toFixed(1) ?? '--'}°F`;
 document.getElementById('garage-stats').textContent = `24h High: ${garageMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${garageMinMax.min?.toFixed(1) ?? '--'}°F`;
-
+console.log("DEBUG: Fridge history:", fridgeHistory);
+console.log("DEBUG: Fridge min/max:", fridgeMinMax);
 
 // --- Function to Connect to Sump Monitor SSE ---
 function connectSumpMonitorSSE() {
