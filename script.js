@@ -306,10 +306,6 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
 
             console.log("DEBUG: Fridge history:", fridgeHistory);
             console.log("DEBUG: Fridge min/max:", fridgeMinMax);
-            .innerHTML =
-            `24h High: <span class="temp-high">${max}°F</span> | ` +
-            `Low: <span class="temp-low">${min}°F</span>`;
-
 
             // Update heater live display with last values in range
             if (lastHeaterRunTime !== null && liveHeaterValueElement) {
