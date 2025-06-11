@@ -287,8 +287,16 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
                 garageChartInstance.data.datasets[0].data = garageHistory;
                 garageChartInstance.update();
             }
-
-
+          
+            //  ---MIN/MAX ---
+            const fridgeMinMax = calculateMinMax(fridgeHistory);
+            const freezerMinMax = calculateMinMax(freezerHistory);
+            const garageMinMax = calculateMinMax(garageHistory);
+            document.getElementById('fridge-stats').textContent = `24h High: ${fridgeMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${fridgeMinMax.min?.toFixed(1) ?? '--'}°F`;
+            document.getElementById('freezer-stats').textContent = `24h High: ${freezerMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${freezerMinMax.min?.toFixed(1) ?? '--'}°F`;
+            document.getElementById('garage-stats').textContent = `24h High: ${garageMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${garageMinMax.min?.toFixed(1) ?? '--'}°F`;
+            console.log("DEBUG: Fridge history:", fridgeHistory);
+            console.log("DEBUG: Fridge min/max:", fridgeMinMax);
 
             // Update heater live display with last values in range
             if (lastHeaterRunTime !== null && liveHeaterValueElement) {
@@ -468,18 +476,7 @@ function connectTempMonitorSSE() {
         tempMonitorStatusElement.textContent = (err.target && err.target.readyState === EventSource.CLOSED) ? 'Conn. Closed' : "Conn. Error";
         tempMonitorStatusElement.style.color = 'red';
     };
-  //  ---MIN/MAX ---
-const fridgeMinMax = calculateMinMax(fridgeHistory);
-const freezerMinMax = calculateMinMax(freezerHistory);
-const garageMinMax = calculateMinMax(garageHistory);
-document.getElementById('fridge-stats').textContent = `24h High: ${fridgeMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${fridgeMinMax.min?.toFixed(1) ?? '--'}°F`;
-document.getElementById('freezer-stats').textContent = `24h High: ${freezerMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${freezerMinMax.min?.toFixed(1) ?? '--'}°F`;
-document.getElementById('garage-stats').textContent = `24h High: ${garageMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${garageMinMax.min?.toFixed(1) ?? '--'}°F`;
-console.log("DEBUG: Fridge history:", fridgeHistory);
-console.log("DEBUG: Fridge min/max:", fridgeMinMax);
 }
-
-
 
 // --- Function to Connect to Sump Monitor SSE ---
 function connectSumpMonitorSSE() {
