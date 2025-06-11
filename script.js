@@ -292,11 +292,24 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
             const fridgeMinMax = calculateMinMax(fridgeHistory);
             const freezerMinMax = calculateMinMax(freezerHistory);
             const garageMinMax = calculateMinMax(garageHistory);
-            document.getElementById('fridge-stats').textContent = `24h High: ${fridgeMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${fridgeMinMax.min?.toFixed(1) ?? '--'}°F`;
-            document.getElementById('freezer-stats').textContent = `24h High: ${freezerMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${freezerMinMax.min?.toFixed(1) ?? '--'}°F`;
-            document.getElementById('garage-stats').textContent = `24h High: ${garageMinMax.max?.toFixed(1) ?? '--'}°F | Low: ${garageMinMax.min?.toFixed(1) ?? '--'}°F`;
+            document.getElementById('fridge-stats').innerHTML =
+              `24h High: <span class="temp-high">${fridgeMinMax.max?.toFixed(1) ?? '--'}°F</span> | ` +
+              `Low: <span class="temp-low">${fridgeMinMax.min?.toFixed(1) ?? '--'}°F</span>`;
+            
+            document.getElementById('freezer-stats').innerHTML =
+              `24h High: <span class="temp-high">${freezerMinMax.max?.toFixed(1) ?? '--'}°F</span> | ` +
+              `Low: <span class="temp-low">${freezerMinMax.min?.toFixed(1) ?? '--'}°F</span>`;
+            
+            document.getElementById('garage-stats').innerHTML =
+              `24h High: <span class="temp-high">${garageMinMax.max?.toFixed(1) ?? '--'}°F</span> | ` +
+              `Low: <span class="temp-low">${garageMinMax.min?.toFixed(1) ?? '--'}°F</span>`;
+
             console.log("DEBUG: Fridge history:", fridgeHistory);
             console.log("DEBUG: Fridge min/max:", fridgeMinMax);
+            .innerHTML =
+            `24h High: <span class="temp-high">${max}°F</span> | ` +
+            `Low: <span class="temp-low">${min}°F</span>`;
+
 
             // Update heater live display with last values in range
             if (lastHeaterRunTime !== null && liveHeaterValueElement) {
