@@ -200,7 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log("DEBUG: Charts initialization attempted.");
 
     // Start SSE connections
-    connectTempMonitorSSE();
+    //connectTempMonitorSSE();
     connectSumpMonitorSSE();
 
     // Load initial historical data based on default dropdown selection
@@ -576,67 +576,73 @@ function connectSumpMonitorSSE() {
     };
 }
 
+/**
+ * Fetches historical and forecast weather data from the Visual Crossing API.
+ * @param {number} hours - The number of past hours of data to retrieve.
+ */
+function fetchTempMonitorHistoricalData(hours) {
+    // Your new API key and the base URL
+    const apiKey = '67YNPN46DR5ATZVK8QMXT54HL';
+    const location = 'Watertown,sd';
+    
+    // Calculate the start date based on the number of hours requested
+    const startDate = new Date();
+    startDate.setHours(startDate.getHours() - hours);
+    
+    // Format the date as YYYY-MM-DD for the API URL
+    const startDateString = startDate.toISOString().split('T')[0];
 
-async function fetchOutdoorTemperatureHistory(rangeHours = 24) {
-    const now = new Date();
-    const start = new Date(now.getTime() - rangeHours * 60 * 60 * 1000);
+    // The API URL fetches data from the calculated start date up to today
+    const apiUrl = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/${location}/${startDateString}?unitGroup=us&include=hours&key=${apiKey}&contentType=json`;
 
-    const startDate = start.toISOString().split('T')[0];
-    // ⚠️ Don't use today — use yesterday for archive data
-    const yesterday = new Date();
-    yesterday.setDate(now.getDate() - 1);
-    const endDate = yesterday.toISOString().split('T')[0];
+    console.log(`DEBUG: Fetching outdoor temp data from: ${apiUrl}`);
 
-  const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown%2C%20sd?unitGroup=us&key=67YNPN46DR5ATZVK8QMXT54HL&contentType=json`;
+    fetch(apiUrl)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Network response was not ok: ${response.statusText}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log("DEBUG: Received data from Visual Crossing API:", data);
 
-    console.log("DEBUG: Fetching outdoor temps from:", url);
+            // Clear out old data before loading new data
+            const timestamps = [];
+            const outdoorTempHistory = [];
 
-    try {
-        const res = await fetch(url);
-        const data = await res.json();
+            // The data is nested in days -> hours, so we need to loop through both
+            if (data.days) {
+                data.days.forEach(day => {
+                    day.hours.forEach(hour => {
+                        // IMPORTANT: Convert datetimeEpoch (seconds) to milliseconds for Chart.js
+                        const timestamp = hour.datetimeEpoch * 1000;
+                        const temp = hour.temp;
 
-        if (!data.hourly || !data.hourly.time || !data.hourly.temperature_2m) {
-            console.error("DEBUG: Open-Meteo data missing expected fields:", data);
-            return;
-        }
-console.log("DEBUG: Open-Meteo raw response:", data);
-      
-        // Convert Open-Meteo time strings to Date objects and match against your timeHistory
-        outdoorTempHistory.length = 0;
-
-        const openTimes = data.hourly.time.map(t => new Date(t));
-        const temps = data.hourly.temperature_2m;
-
-        // Match each timestamp in your existing garage data to nearest Open-Meteo reading
-        for (let i = 0; i < timeHistory.length; i++) {
-            const ts = timeHistory[i];
-
-            // Find the closest Open-Meteo timestamp
-            let closestIdx = 0;
-            let minDiff = Infinity;
-
-            for (let j = 0; j < openTimes.length; j++) {
-                const diff = Math.abs(openTimes[j] - ts);
-                if (diff < minDiff) {
-                    minDiff = diff;
-                    closestIdx = j;
-                }
+                        timestamps.push(timestamp);
+                        outdoorTempHistory.push(temp);
+                    });
+                });
             }
 
-            outdoorTempHistory.push(temps[closestIdx]);
-        }
-
-        console.log("DEBUG: Outdoor temps matched to garage history:", outdoorTempHistory.length);
-
-        // Update chart
-        if (garageChartInstance && garageChartInstance.data.datasets[1]) {
-            garageChartInstance.data.datasets[1].data = outdoorTempHistory;
-            garageChartInstance.update();
-        }
-
-    } catch (err) {
-        console.error("DEBUG: Failed to fetch Open-Meteo data:", err);
-    }
+            // Update the specific dataset for the outdoor temperature on the garage chart
+            // Find the dataset by its label
+            const outdoorDataset = garageChartInstance.data.datasets.find(dataset => dataset.label === 'Outdoor Temp (°F)');
+            
+            if (outdoorDataset) {
+                outdoorDataset.data = outdoorTempHistory;
+                // We also need to update the chart's main labels (timestamps)
+                garageChartInstance.data.labels = timestamps;
+                garageChartInstance.update();
+                console.log(`DEBUG: Updated garage chart with ${outdoorTempHistory.length} outdoor temp data points.`);
+            } else {
+                console.error("DEBUG: Could not find 'Outdoor Temp (°F)' dataset to update.");
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching historical weather data:', error);
+            // Optionally update the UI to show an error
+        });
 }
 
 
