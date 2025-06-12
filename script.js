@@ -595,23 +595,22 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
         outdoorTempHistory.length = 0;
 
         // Map to your existing timeHistory[]
-        for (let i = 0; i < timeHistory.length; i++) {
-            const ts = timeHistory[i];
-            let closestTemp = null;
-            let closestDiff = Infinity;
+for (let i = 0; i < timeHistory.length; i++) {
+    const ts = timeHistory[i];
+    let closestTemp = null;
+    let closestDiff = Infinity;
 
-            for (const hour of hourlyData) {
-                const hourTime = new Date(`${data.days[0].datetime}T${hour.datetime}`);
-                const diff = Math.abs(ts - hourTime);
-
-                if (diff < closestDiff) {
-                    closestDiff = diff;
-                    closestTemp = hour.temp;
-                }
-            }
-
-            outdoorTempHistory.push(closestTemp);
+    for (const hour of hourlyData) {
+        const diff = Math.abs(hour.time - ts);
+        if (diff < closestDiff) {
+            closestDiff = diff;
+            closestTemp = hour.temp;
         }
+    }
+
+    outdoorTempHistory.push(closestTemp);
+}
+
 
         console.log("DEBUG: Mapped outdoor temps to", outdoorTempHistory.length, "timestamps.");
 
