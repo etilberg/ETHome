@@ -654,10 +654,10 @@ function applyOutdoorTemps(hourlyData) {
             }
         }
 
-        outdoorTempHistory.push(closestTemp);
+        outdoorTempHistory.push(closestTemp ?? null); // use null if no match
     }
 
-    console.log("DEBUG: Mapped", outdoorTempHistory.length, "outdoor temps to garage timestamps.");
+    console.log(`DEBUG: Mapped ${outdoorTempHistory.length} outdoor temps to ${timeHistory.length} garage timestamps.`);
 
     if (garageChartInstance && garageChartInstance.data.datasets[1]) {
         garageChartInstance.data.datasets[1].data = outdoorTempHistory;
