@@ -638,7 +638,8 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
         console.error("DEBUG: Failed to fetch or process Visual Crossing data:", err.message || err);
 
         // Attempt fallback to stale cache
-        const stale = localStorage.getItem(cacheKey);
+       /* 
+       const stale = localStorage.getItem(cacheKey);
         if (stale) {
             try {
                 const parsed = JSON.parse(stale);
@@ -648,6 +649,21 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
                 console.warn("DEBUG: Stale cache also invalid.");
             }
         }
+        */
+      // try/catch block around JSON.parse() already exists
+        if (cached) {
+            try {
+                const parsed = JSON.parse(cached);
+                const ageMinutes = (Date.now() - parsed.timestamp) / 1000 / 60;
+        
+                console.warn(`DEBUG: Using outdoor temp cache (${ageMinutes.toFixed(1)} min old) even though it may be stale`);
+                applyOutdoorTemps(parsed.data);
+                return;
+            } catch (e) {
+                console.warn("DEBUG: Failed to parse stale cache");
+            }
+        }
+
     }
 }
 function applyOutdoorTemps(hourlyData) {
