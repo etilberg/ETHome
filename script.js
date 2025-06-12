@@ -59,7 +59,7 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
         console.error(`DEBUG: Failed to get 2D context for canvas ID '${canvasId}'!`);
         return null;
     }
-    console.log(`DEBUG: Creating chart for canvas ID '${canvasId}'`);
+    //console.log(`DEBUG: Creating chart for canvas ID '${canvasId}'`);
     return new Chart(ctx, {
         type: 'line',
         data: {
@@ -132,7 +132,7 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
 
 // --- Initialize Charts and Load Initial Data ---
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("DEBUG: DOM loaded, initializing charts.");
+    //console.log("DEBUG: DOM loaded, initializing charts.");
     if (typeof TEMP_MONITOR_DEVICE_ID === 'undefined' || typeof TEMP_MONITOR_HISTORY_CSV_URL === 'undefined') {
         console.error("DEBUG: Configuration variables from config.js seem to be missing!");
         tempMonitorStatusElement.textContent = "Config Error!";
@@ -197,7 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
     sumpPowerChartInstance = createChart('sumpPowerChart', 'External Power (V)', 'rgb(153, 102, 255)', 'Voltage (V)');
     sumpRuntimeChartInstance = createChart('sumpRuntimeChart', 'Sump Runtime (sec)', 'rgb(255, 159, 64)', 'Runtime (seconds)');
     sumpSinceRunChartInstance = createChart('sumpSinceRunChart', 'Time Since Last Run (min)', 'rgb(201, 203, 207)', 'Minutes');
-    console.log("DEBUG: Charts initialization attempted.");
+    //console.log("DEBUG: Charts initialization attempted.");
 
     // Start SSE connections
     connectTempMonitorSSE();
@@ -222,7 +222,7 @@ document.getElementById('history-range').addEventListener('change', function() {
 document.getElementById('reset-zoom').addEventListener('click', resetZoomOnAllCharts);
 
 function resetZoomOnAllCharts() {
-    console.log("DEBUG: Resetting zoom on all charts");
+    //console.log("DEBUG: Resetting zoom on all charts");
     if (fridgeChartInstance) fridgeChartInstance.resetZoom();
     if (freezerChartInstance) freezerChartInstance.resetZoom();
     if (garageChartInstance) garageChartInstance.resetZoom();
@@ -430,7 +430,7 @@ function fetchSumpHistoricalData(rangeHours) {
 
 // --- Function to Connect to Temp Monitor SSE ---
 function connectTempMonitorSSE() {
-    console.log("DEBUG: Initializing Temp Monitor connection.");
+    //console.log("DEBUG: Initializing Temp Monitor connection.");
     if (!TEMP_MONITOR_DEVICE_ID || TEMP_MONITOR_DEVICE_ID === "YOUR_FRIDGE_FREEZER_DEVICE_ID_HERE" || !TEMP_MONITOR_ACCESS_TOKEN || TEMP_MONITOR_ACCESS_TOKEN === "YOUR_FRIDGE_FREEZER_ACCESS_TOKEN_HERE") {
          console.error("DEBUG: Temp Monitor Device ID or Access Token not set (checked in connect function).");
          tempMonitorStatusElement.textContent = "Config Error!";
@@ -439,7 +439,7 @@ function connectTempMonitorSSE() {
     }
 
     const sseUrl = `https://api.particle.io/v1/devices/${TEMP_MONITOR_DEVICE_ID}/events/${TEMP_MONITOR_EVENT_NAME}?access_token=${TEMP_MONITOR_ACCESS_TOKEN}`;
-    console.log(`DEBUG: Attempting Temp Monitor SSE connection (Token Hidden)`);
+    //console.log(`DEBUG: Attempting Temp Monitor SSE connection (Token Hidden)`);
     tempMonitorStatusElement.textContent = "Connecting...";
     tempMonitorStatusElement.style.color = '#555';
 
@@ -507,7 +507,7 @@ function connectTempMonitorSSE() {
 
 // --- Function to Connect to Sump Monitor SSE ---
 function connectSumpMonitorSSE() {
-     console.log("DEBUG: Initializing Sump Monitor connection.");
+    // console.log("DEBUG: Initializing Sump Monitor connection.");
      if (!SUMP_MONITOR_DEVICE_ID || SUMP_MONITOR_DEVICE_ID === "YOUR_SUMP_PUMP_DEVICE_ID_HERE" || !SUMP_MONITOR_ACCESS_TOKEN || SUMP_MONITOR_ACCESS_TOKEN === "YOUR_SUMP_PUMP_ACCESS_TOKEN_HERE") {
         console.error("DEBUG: Sump Monitor Device ID or Access Token not set (checked in connect function).");
         sumpMonitorStatusElement.textContent = "Config Error!";
@@ -516,14 +516,14 @@ function connectSumpMonitorSSE() {
     }
 
     const sseUrl = `https://api.particle.io/v1/devices/${SUMP_MONITOR_DEVICE_ID}/events/${SUMP_MONITOR_EVENT_NAME}?access_token=${SUMP_MONITOR_ACCESS_TOKEN}`;
-    console.log(`DEBUG: Attempting Sump Monitor SSE connection (Token Hidden)`);
+    //console.log(`DEBUG: Attempting Sump Monitor SSE connection (Token Hidden)`);
     sumpMonitorStatusElement.textContent = "Connecting...";
      sumpMonitorStatusElement.style.color = '#555';
 
     const eventSource = new EventSource(sseUrl);
 
     eventSource.onopen = function() {
-        console.log("DEBUG: Sump Monitor SSE Connected!");
+        //console.log("DEBUG: Sump Monitor SSE Connected!");
         sumpMonitorStatusElement.textContent = "Connected";
         sumpMonitorStatusElement.style.color = 'green';
     };
@@ -579,7 +579,7 @@ function connectSumpMonitorSSE() {
 
 async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
     const cacheKey = `outdoorTemps_${rangeHours}h`;
-    const cacheDurationMinutes = 60; // re-fetch after 1 hour
+    const cacheDurationMinutes = 60;
 
     const cached = localStorage.getItem(cacheKey);
     if (cached) {
@@ -592,7 +592,7 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
         }
     }
 
-    const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown%2C%20sd/last24hours?unitGroup=us&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
+    const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown%2C%20sd/last${rangeHours}hours?unitGroup=us&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
 
     console.log("DEBUG: Fetching Visual Crossing weather data:", url);
 
@@ -605,10 +605,10 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
             return;
         }
 
-        // ✅ Flatten all hourly data across all days
+        // ✅ Use hour.datetimeEpoch (safe timestamp in milliseconds)
         const hourlyData = data.days.flatMap(day =>
             day.hours.map(hour => ({
-                time: new Date(`${day.datetime}T${hour.datetime}`),
+                time: new Date(hour.datetimeEpoch * 1000),
                 temp: hour.temp
             }))
         );
@@ -618,7 +618,6 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
             return;
         }
 
-        // ✅ Cache the data for reuse
         localStorage.setItem(cacheKey, JSON.stringify({
             timestamp: Date.now(),
             data: hourlyData
@@ -630,6 +629,7 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
         console.error("DEBUG: Failed to fetch or process Visual Crossing data:", err);
     }
 }
+
 
 function applyOutdoorTemps(hourlyData) {
     outdoorTempHistory.length = 0;
