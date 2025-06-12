@@ -576,21 +576,25 @@ function connectSumpMonitorSSE() {
     };
 }
 
-
 async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
     const cacheKey = `outdoorTemps_${rangeHours}h_${timeHistory.length}`;
-
     const cacheDurationMinutes = 60;
 
     const cached = localStorage.getItem(cacheKey);
     if (cached) {
-        const parsed = JSON.parse(cached);
-        const ageMinutes = (Date.now() - parsed.timestamp) / 1000 / 60;
-        if (ageMinutes < cacheDurationMinutes) {
-            console.log(`DEBUG: Using cached outdoor temp data (${ageMinutes.toFixed(1)} min old) for ${timeHistory.length} timestamps`);
+        try {
+            const parsed = JSON.parse(cached);
+            const ageMinutes = (Date.now() - parsed.timestamp) / 1000 / 60;
 
-            applyOutdoorTemps(parsed.data);
-            return;
+            if (ageMinutes < cacheDurationMinutes && parsed.data.length >= timeHistory.length) {
+                console.log(`DEBUG: Using cached outdoor temp data (${ageMinutes.toFixed(1)} min old) for ${timeHistory.length} timestamps`);
+                applyOutdoorTemps(parsed.data);
+                return;
+            } else {
+                console.log("DEBUG: Cache exists but is stale or too short, refetching...");
+            }
+        } catch (e) {
+            console.warn("DEBUG: Failed to parse outdoor temp cache, refetching...");
         }
     }
 
@@ -607,7 +611,7 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
             return;
         }
 
-        // ✅ Use hour.datetimeEpoch (safe timestamp in milliseconds)
+        // ✅ Use hour.datetimeEpoch (safe timestamp in ms)
         const hourlyData = data.days.flatMap(day =>
             day.hours.map(hour => ({
                 time: new Date(hour.datetimeEpoch * 1000),
@@ -620,22 +624,19 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
             return;
         }
 
+        // ✅ Save to cache
         localStorage.setItem(cacheKey, JSON.stringify({
             timestamp: Date.now(),
             data: hourlyData
         }));
-      
-        if (ageMinutes < cacheDurationMinutes && parsed.data.length >= timeHistory.length) {
-            console.log(`DEBUG: Using cached outdoor temp data (${ageMinutes.toFixed(1)} min old)`);
-            applyOutdoorTemps(parsed.data);
-            return;
-        }
+
         applyOutdoorTemps(hourlyData);
 
     } catch (err) {
         console.error("DEBUG: Failed to fetch or process Visual Crossing data:", err);
     }
 }
+
 
 function applyOutdoorTemps(hourlyData) {
     outdoorTempHistory.length = 0;
