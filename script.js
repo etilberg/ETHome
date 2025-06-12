@@ -591,8 +591,10 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
             return;
         }
     }
+console.log("DEBUG: First 5 hourly outdoor temps:");
+console.log(hourlyData.slice(0, 5));
 
-    const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown%2C%20sd/last${rangeHours}hours?unitGroup=us&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
+    const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown%2C%20sd/last24hours?unitGroup=us&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
 
     console.log("DEBUG: Fetching Visual Crossing weather data:", url);
 
