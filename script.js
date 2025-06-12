@@ -587,7 +587,7 @@ async function fetchOutdoorTemperatureHistory(rangeHours = 24) {
     yesterday.setDate(now.getDate() - 1);
     const endDate = yesterday.toISOString().split('T')[0];
 
-  const url = `https://archive-api.open-meteo.com/v1/archive?latitude=35.2&longitude=-97.4&start_date=${startDate}&end_date=${endDate}&hourly=temperature_2m&timezone=auto`;
+  const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown%2C%20sd?unitGroup=us&key=67YNPN46DR5ATZVK8QMXT54HL&contentType=json`;
 
     console.log("DEBUG: Fetching outdoor temps from:", url);
 
