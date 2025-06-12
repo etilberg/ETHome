@@ -622,14 +622,18 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
             timestamp: Date.now(),
             data: hourlyData
         }));
-
+      
+        if (ageMinutes < cacheDurationMinutes && parsed.data.length >= timeHistory.length) {
+            console.log(`DEBUG: Using cached outdoor temp data (${ageMinutes.toFixed(1)} min old)`);
+            applyOutdoorTemps(parsed.data);
+            return;
+        }
         applyOutdoorTemps(hourlyData);
 
     } catch (err) {
         console.error("DEBUG: Failed to fetch or process Visual Crossing data:", err);
     }
 }
-
 
 function applyOutdoorTemps(hourlyData) {
     outdoorTempHistory.length = 0;
