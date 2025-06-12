@@ -578,7 +578,8 @@ function connectSumpMonitorSSE() {
 
 
 async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
-    const cacheKey = `outdoorTemps_${rangeHours}h`;
+    const cacheKey = `outdoorTemps_${rangeHours}h_${timeHistory.length}`;
+
     const cacheDurationMinutes = 60;
 
     const cached = localStorage.getItem(cacheKey);
@@ -586,7 +587,8 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
         const parsed = JSON.parse(cached);
         const ageMinutes = (Date.now() - parsed.timestamp) / 1000 / 60;
         if (ageMinutes < cacheDurationMinutes) {
-            console.log(`DEBUG: Using cached outdoor temp data (${ageMinutes.toFixed(1)} min old)`);
+            console.log(`DEBUG: Using cached outdoor temp data (${ageMinutes.toFixed(1)} min old) for ${timeHistory.length} timestamps`);
+
             applyOutdoorTemps(parsed.data);
             return;
         }
