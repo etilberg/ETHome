@@ -580,9 +580,12 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
     const cacheKey = `outdoorTemps_${rangeHours}h_${timeHistory.length}`;
     const cacheDurationMinutes = 60;
 
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-        try {
+    const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown%2C%20sd/last${rangeHours}hours?unitGroup=us&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
+
+    try {
+        // Check cache first
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
             const parsed = JSON.parse(cached);
             const ageMinutes = (Date.now() - parsed.timestamp) / 1000 / 60;
 
@@ -593,25 +596,26 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
             } else {
                 console.log("DEBUG: Cache exists but is stale or too short, refetching...");
             }
-        } catch (e) {
-            console.warn("DEBUG: Failed to parse outdoor temp cache, refetching...");
         }
-    }
 
-    const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown%2C%20sd/last${rangeHours}hours?unitGroup=us&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
-
-    console.log("DEBUG: Fetching Visual Crossing weather data:", url);
-
-    try {
+        console.log("DEBUG: Fetching Visual Crossing weather data:", url);
         const res = await fetch(url);
+
+        const contentType = res.headers.get("content-type") || "";
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(`HTTP ${res.status}: ${errorText}`);
+        }
+        if (!contentType.includes("application/json")) {
+            throw new Error("Unexpected response format (not JSON)");
+        }
+
         const data = await res.json();
 
         if (!data.days || !Array.isArray(data.days)) {
-            console.error("DEBUG: Unexpected Visual Crossing format:", data);
-            return;
+            throw new Error("Missing or invalid `days` array in response");
         }
 
-        // ✅ Use hour.datetimeEpoch (safe timestamp in ms)
         const hourlyData = data.days.flatMap(day =>
             day.hours.map(hour => ({
                 time: new Date(hour.datetimeEpoch * 1000),
@@ -620,11 +624,9 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
         );
 
         if (!hourlyData.length) {
-            console.warn("DEBUG: No hourly data found in Visual Crossing response.");
-            return;
+            throw new Error("No hourly outdoor temperature data found");
         }
 
-        // ✅ Save to cache
         localStorage.setItem(cacheKey, JSON.stringify({
             timestamp: Date.now(),
             data: hourlyData
@@ -633,11 +635,21 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
         applyOutdoorTemps(hourlyData);
 
     } catch (err) {
-        console.error("DEBUG: Failed to fetch or process Visual Crossing data:", err);
+        console.error("DEBUG: Failed to fetch or process Visual Crossing data:", err.message || err);
+
+        // Attempt fallback to stale cache
+        const stale = localStorage.getItem(cacheKey);
+        if (stale) {
+            try {
+                const parsed = JSON.parse(stale);
+                console.warn("DEBUG: Using stale outdoor temp cache due to fetch failure.");
+                applyOutdoorTemps(parsed.data);
+            } catch (e) {
+                console.warn("DEBUG: Stale cache also invalid.");
+            }
+        }
     }
 }
-
-
 function applyOutdoorTemps(hourlyData) {
     outdoorTempHistory.length = 0;
 
@@ -654,7 +666,7 @@ function applyOutdoorTemps(hourlyData) {
             }
         }
 
-        outdoorTempHistory.push(closestTemp ?? null); // use null if no match
+        outdoorTempHistory.push(closestTemp ?? null);
     }
 
     console.log(`DEBUG: Mapped ${outdoorTempHistory.length} outdoor temps to ${timeHistory.length} garage timestamps.`);
