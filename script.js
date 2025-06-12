@@ -586,43 +586,56 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
         const res = await fetch(url);
         const data = await res.json();
 
-        if (!data.days || !data.days[0].hours) {
-            console.error("DEBUG: Unexpected response format from Visual Crossing:", data);
+        if (!data.days || !Array.isArray(data.days)) {
+            console.error("DEBUG: Unexpected Visual Crossing format:", data);
             return;
         }
 
-        const hourlyData = data.days[0].hours;
+        // ✅ Flatten hourly data across all returned days
+        const hourlyData = data.days.flatMap(day =>
+            day.hours.map(hour => ({
+                time: new Date(`${day.datetime}T${hour.datetime}`),
+                temp: hour.temp
+            }))
+        );
+
+        if (!hourlyData.length) {
+            console.warn("DEBUG: No hourly data found in Visual Crossing response.");
+            return;
+        }
+
         outdoorTempHistory.length = 0;
 
-        // Map to your existing timeHistory[]
-for (let i = 0; i < timeHistory.length; i++) {
-    const ts = timeHistory[i];
-    let closestTemp = null;
-    let closestDiff = Infinity;
+        // ✅ Match each garage timestamp to the closest outdoor timestamp
+        for (let i = 0; i < timeHistory.length; i++) {
+            const ts = timeHistory[i];
+            let closestTemp = null;
+            let closestDiff = Infinity;
 
-    for (const hour of hourlyData) {
-        const diff = Math.abs(hour.time - ts);
-        if (diff < closestDiff) {
-            closestDiff = diff;
-            closestTemp = hour.temp;
+            for (const hour of hourlyData) {
+                const diff = Math.abs(hour.time - ts);
+                if (diff < closestDiff) {
+                    closestDiff = diff;
+                    closestTemp = hour.temp;
+                }
+            }
+
+            outdoorTempHistory.push(closestTemp);
         }
-    }
 
-    outdoorTempHistory.push(closestTemp);
-}
+        console.log("DEBUG: Mapped", outdoorTempHistory.length, "outdoor temps to garage timestamps.");
 
-
-        console.log("DEBUG: Mapped outdoor temps to", outdoorTempHistory.length, "timestamps.");
-
+        // ✅ Update garage chart with new dataset
         if (garageChartInstance && garageChartInstance.data.datasets[1]) {
             garageChartInstance.data.datasets[1].data = outdoorTempHistory;
             garageChartInstance.update();
         }
 
     } catch (err) {
-        console.error("DEBUG: Failed to fetch Visual Crossing data:", err);
+        console.error("DEBUG: Failed to fetch or process Visual Crossing data:", err);
     }
 }
+
 
 
 
