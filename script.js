@@ -578,6 +578,20 @@ function connectSumpMonitorSSE() {
 
 
 async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
+    const cacheKey = `outdoorTemps_${rangeHours}h`;
+    const cacheDurationMinutes = 60; // re-fetch after 1 hour
+
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+        const parsed = JSON.parse(cached);
+        const ageMinutes = (Date.now() - parsed.timestamp) / 1000 / 60;
+        if (ageMinutes < cacheDurationMinutes) {
+            console.log(`DEBUG: Using cached outdoor temp data (${ageMinutes.toFixed(1)} min old)`);
+            applyOutdoorTemps(parsed.data);
+            return;
+        }
+    }
+
     const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown%2C%20sd/last${rangeHours}hours?unitGroup=us&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
 
     console.log("DEBUG: Fetching Visual Crossing weather data:", url);
@@ -591,7 +605,6 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
             return;
         }
 
-        // ✅ Flatten hourly data across all returned days
         const hourlyData = data.days.flatMap(day =>
             day.hours.map(hour => ({
                 time: new Date(`${day.datetime}T${hour.datetime}`),
@@ -604,38 +617,42 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
             return;
         }
 
-        outdoorTempHistory.length = 0;
+        // Cache data
+        localStorage.setItem(cacheKey, JSON.stringify({
+            timestamp: Date.now(),
+            data: hourlyData
+        }));
 
-        // ✅ Match each garage timestamp to the closest outdoor timestamp
-        for (let i = 0; i < timeHistory.length; i++) {
-            const ts = timeHistory[i];
-            let closestTemp = null;
-            let closestDiff = Infinity;
-
-            for (const hour of hourlyData) {
-                const diff = Math.abs(hour.time - ts);
-                if (diff < closestDiff) {
-                    closestDiff = diff;
-                    closestTemp = hour.temp;
-                }
-            }
-
-            outdoorTempHistory.push(closestTemp);
-        }
-
-        console.log("DEBUG: Mapped", outdoorTempHistory.length, "outdoor temps to garage timestamps.");
-
-        // ✅ Update garage chart with new dataset
-        if (garageChartInstance && garageChartInstance.data.datasets[1]) {
-            garageChartInstance.data.datasets[1].data = outdoorTempHistory;
-            garageChartInstance.update();
-        }
+        applyOutdoorTemps(hourlyData);
 
     } catch (err) {
         console.error("DEBUG: Failed to fetch or process Visual Crossing data:", err);
     }
 }
 
+function applyOutdoorTemps(hourlyData) {
+    outdoorTempHistory.length = 0;
 
+    for (let i = 0; i < timeHistory.length; i++) {
+        const ts = timeHistory[i];
+        let closestTemp = null;
+        let closestDiff = Infinity;
 
+        for (const hour of hourlyData) {
+            const diff = Math.abs(hour.time - ts);
+            if (diff < closestDiff) {
+                closestDiff = diff;
+                closestTemp = hour.temp;
+            }
+        }
 
+        outdoorTempHistory.push(closestTemp);
+    }
+
+    console.log("DEBUG: Mapped", outdoorTempHistory.length, "outdoor temps to garage timestamps.");
+
+    if (garageChartInstance && garageChartInstance.data.datasets[1]) {
+        garageChartInstance.data.datasets[1].data = outdoorTempHistory;
+        garageChartInstance.update();
+    }
+}
