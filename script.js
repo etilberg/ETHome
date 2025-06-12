@@ -335,7 +335,7 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
         .catch(err => {
             console.error("DEBUG: Failed to fetch historical temp data:", err);
         });
-  fetchOutdoorTemperatureHistory(rangeHours);
+  fetchVisualCrossingOutdoorTemps(rangeHours);
 }
 
 // --- Fetch Historical Data for Sump Pump ---
@@ -576,73 +576,53 @@ function connectSumpMonitorSSE() {
     };
 }
 
-/**
- * Fetches historical and forecast weather data from the Visual Crossing API.
- * @param {number} hours - The number of past hours of data to retrieve.
- */
-function fetchTempMonitorHistoricalData(hours) {
-    // Your new API key and the base URL
-    const apiKey = '67YNPN46DR5ATZVK8QMXT54HL';
-    const location = 'Watertown,sd';
-    
-    // Calculate the start date based on the number of hours requested
-    const startDate = new Date();
-    startDate.setHours(startDate.getHours() - hours);
-    
-    // Format the date as YYYY-MM-DD for the API URL
-    const startDateString = startDate.toISOString().split('T')[0];
 
-    // The API URL fetches data from the calculated start date up to today
-    const apiUrl = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/${location}/${startDateString}?unitGroup=us&include=hours&key=${apiKey}&contentType=json`;
+async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
+    const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown%2C%20sd/last${rangeHours}hours?unitGroup=us&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
 
-    console.log(`DEBUG: Fetching outdoor temp data from: ${apiUrl}`);
+    console.log("DEBUG: Fetching Visual Crossing weather data:", url);
 
-    fetch(apiUrl)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Network response was not ok: ${response.statusText}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            console.log("DEBUG: Received data from Visual Crossing API:", data);
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
 
-            // Clear out old data before loading new data
-            const timestamps = [];
-            const outdoorTempHistory = [];
+        if (!data.days || !data.days[0].hours) {
+            console.error("DEBUG: Unexpected response format from Visual Crossing:", data);
+            return;
+        }
 
-            // The data is nested in days -> hours, so we need to loop through both
-            if (data.days) {
-                data.days.forEach(day => {
-                    day.hours.forEach(hour => {
-                        // IMPORTANT: Convert datetimeEpoch (seconds) to milliseconds for Chart.js
-                        const timestamp = hour.datetimeEpoch * 1000;
-                        const temp = hour.temp;
+        const hourlyData = data.days[0].hours;
+        outdoorTempHistory.length = 0;
 
-                        timestamps.push(timestamp);
-                        outdoorTempHistory.push(temp);
-                    });
-                });
+        // Map to your existing timeHistory[]
+        for (let i = 0; i < timeHistory.length; i++) {
+            const ts = timeHistory[i];
+            let closestTemp = null;
+            let closestDiff = Infinity;
+
+            for (const hour of hourlyData) {
+                const hourTime = new Date(`${data.days[0].datetime}T${hour.datetime}`);
+                const diff = Math.abs(ts - hourTime);
+
+                if (diff < closestDiff) {
+                    closestDiff = diff;
+                    closestTemp = hour.temp;
+                }
             }
 
-            // Update the specific dataset for the outdoor temperature on the garage chart
-            // Find the dataset by its label
-            const outdoorDataset = garageChartInstance.data.datasets.find(dataset => dataset.label === 'Outdoor Temp (°F)');
-            
-            if (outdoorDataset) {
-                outdoorDataset.data = outdoorTempHistory;
-                // We also need to update the chart's main labels (timestamps)
-                garageChartInstance.data.labels = timestamps;
-                garageChartInstance.update();
-                console.log(`DEBUG: Updated garage chart with ${outdoorTempHistory.length} outdoor temp data points.`);
-            } else {
-                console.error("DEBUG: Could not find 'Outdoor Temp (°F)' dataset to update.");
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching historical weather data:', error);
-            // Optionally update the UI to show an error
-        });
+            outdoorTempHistory.push(closestTemp);
+        }
+
+        console.log("DEBUG: Mapped outdoor temps to", outdoorTempHistory.length, "timestamps.");
+
+        if (garageChartInstance && garageChartInstance.data.datasets[1]) {
+            garageChartInstance.data.datasets[1].data = outdoorTempHistory;
+            garageChartInstance.update();
+        }
+
+    } catch (err) {
+        console.error("DEBUG: Failed to fetch Visual Crossing data:", err);
+    }
 }
 
 
