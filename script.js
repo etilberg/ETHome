@@ -200,7 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log("DEBUG: Charts initialization attempted.");
 
     // Start SSE connections
-    //connectTempMonitorSSE();
+    connectTempMonitorSSE();
     connectSumpMonitorSSE();
 
     // Load initial historical data based on default dropdown selection
