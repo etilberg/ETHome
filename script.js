@@ -321,8 +321,8 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
               `24h High: <span class="temp-high">${garageMinMax.max?.toFixed(1) ?? '--'}°F</span> | ` +
               `Low: <span class="temp-low">${garageMinMax.min?.toFixed(1) ?? '--'}°F</span>`;
 
-            console.log("DEBUG: Fridge history:", fridgeHistory);
-            console.log("DEBUG: Fridge min/max:", fridgeMinMax);
+            //console.log("DEBUG: Fridge history:", fridgeHistory);
+            //console.log("DEBUG: Fridge min/max:", fridgeMinMax);
 
             // Update heater live display with last values in range
             if (lastHeaterRunTime !== null && liveHeaterValueElement) {
@@ -591,8 +591,6 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
             return;
         }
     }
-console.log("DEBUG: First 5 hourly outdoor temps:");
-console.log(hourlyData.slice(0, 5));
 
     const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown%2C%20sd/last24hours?unitGroup=us&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
 
@@ -607,6 +605,7 @@ console.log(hourlyData.slice(0, 5));
             return;
         }
 
+        // ✅ Flatten all hourly data across all days
         const hourlyData = data.days.flatMap(day =>
             day.hours.map(hour => ({
                 time: new Date(`${day.datetime}T${hour.datetime}`),
@@ -619,7 +618,7 @@ console.log(hourlyData.slice(0, 5));
             return;
         }
 
-        // Cache data
+        // ✅ Cache the data for reuse
         localStorage.setItem(cacheKey, JSON.stringify({
             timestamp: Date.now(),
             data: hourlyData
