@@ -577,24 +577,38 @@ function connectSumpMonitorSSE() {
 }
 
 async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
-    const cacheKey = `outdoorTemps_${rangeHours}h_${timeHistory.length}`;
-    const cacheDurationMinutes = 60;
+    if (!timeHistory.length) {
+        console.warn("DEBUG: Skipping outdoor temp fetch — timeHistory is empty.");
+        return;
+    }
 
     function formatVCDate(d) {
-    return d.toISOString().split(".")[0]; // Remove milliseconds
+        if (!(d instanceof Date) || isNaN(d)) return null;
+        return d.toISOString().split(".")[0]; // remove milliseconds
     }
+
     const start = new Date(timeHistory[0]);
     const end = new Date(timeHistory[timeHistory.length - 1]);
-    const vcUrl = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${formatVCDate(start)}/${formatVCDate(end)}?unitGroup=us&key=YOUR_KEY&include=hours&contentType=json&timezone=America/Chicago`;
+    const startStr = formatVCDate(start);
+    const endStr = formatVCDate(end);
+
+    if (!startStr || !endStr) {
+        console.warn("DEBUG: Invalid start or end time for Visual Crossing request.");
+        return;
+    }
+
+    const cacheKey = `outdoorTemps_${startStr}_${endStr}`;
+    const cacheDurationMinutes = 60;
+
+    const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${startStr}/${endStr}?unitGroup=us&timezone=America/Chicago&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
 
     try {
-        // Check cache first
         const cached = localStorage.getItem(cacheKey);
         if (cached) {
             const parsed = JSON.parse(cached);
             const ageMinutes = (Date.now() - parsed.timestamp) / 1000 / 60;
 
-            if (ageMinutes < cacheDurationMinutes && parsed.data.length >= timeHistory.length) {
+            if (parsed.data.length >= timeHistory.length) {
                 console.log(`DEBUG: Using cached outdoor temp data (${ageMinutes.toFixed(1)} min old) for ${timeHistory.length} timestamps`);
                 applyOutdoorTemps(parsed.data);
                 return;
@@ -605,7 +619,6 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
 
         console.log("DEBUG: Fetching Visual Crossing weather data:", url);
         const res = await fetch(url);
-
         const contentType = res.headers.get("content-type") || "";
         if (!res.ok) {
             const errorText = await res.text();
@@ -632,11 +645,9 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
             throw new Error("No hourly outdoor temperature data found");
         }
 
-        // ✅ DEBUG: Print time coverage
         console.log("DEBUG: First 5 hourly outdoor temps:", hourlyData.slice(0, 5).map(h => h.time.toISOString()));
         console.log("DEBUG: Last 5 hourly outdoor temps:", hourlyData.slice(-5).map(h => h.time.toISOString()));
 
-        // Save to cache
         localStorage.setItem(cacheKey, JSON.stringify({
             timestamp: Date.now(),
             data: hourlyData
@@ -647,7 +658,6 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
     } catch (err) {
         console.error("DEBUG: Failed to fetch or process Visual Crossing data:", err.message || err);
 
-        // Fallback to last known good cache
         const stale = localStorage.getItem(cacheKey);
         if (stale) {
             try {
