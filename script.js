@@ -637,6 +637,10 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
 
     } catch (err) {
         console.error("DEBUG: Failed to fetch or process Visual Crossing data:", err.message || err);
+        console.log("DEBUG: First 5 hourly outdoor temps:");
+        console.log(hourlyData.slice(0, 5).map(h => h.time.toISOString()));
+        console.log("DEBUG: Last 5 hourly outdoor temps:");
+        console.log(hourlyData.slice(-5).map(h => h.time.toISOString()));
 
         // Attempt fallback to stale cache
        /* 
@@ -666,10 +670,6 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
         }
 
     }
-  console.log("DEBUG: First 5 hourly outdoor temps:");
-  console.log(hourlyData.slice(0, 5).map(h => h.time.toISOString()));
-  console.log("DEBUG: Last 5 hourly outdoor temps:");
-  console.log(hourlyData.slice(-5).map(h => h.time.toISOString()));
 }
 function applyOutdoorTemps(hourlyData) {
     outdoorTempHistory.length = 0;
