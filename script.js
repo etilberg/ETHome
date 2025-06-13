@@ -695,11 +695,19 @@ function applyOutdoorTemps(hourlyTemps) {
 
   // Set the data on garage chart
   if (charts.garageChart) {
+   /* 
     const outdoorDataset = charts.garageChart.data.datasets.find(ds => ds.label === "Outdoor Temp");
     if (outdoorDataset) {
       outdoorDataset.data = outdoorTemps;
       charts.garageChart.update();
     }
+    */
+    const garageDataset = garageChart.data.datasets.find(ds => ds.label === "Outdoor Temp");
+    if (garageDataset) {
+      garageDataset.data = mappedTemps;
+      garageChart.update();
+}
+
   }
 
   console.log(`DEBUG: Mapped ${outdoorTemps.filter(v => v !== null).length} outdoor temps to ${timeHistory.length} garage timestamps.`);
