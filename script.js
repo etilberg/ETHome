@@ -591,7 +591,7 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
     }
 
     function formatVCDateLocal(date) {
-      return date.toLocaleString("sv-SE", { timeZone: "America/Chicago" }).replace(" ", "T").slice(0, 16);
+        return date.toISOString().split('.')[0]; // returns YYYY-MM-DDTHH:mm:ss
     }
 
 
