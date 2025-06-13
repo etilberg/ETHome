@@ -580,7 +580,12 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
     const cacheKey = `outdoorTemps_${rangeHours}h_${timeHistory.length}`;
     const cacheDurationMinutes = 60;
 
-    const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown%2C%20sd/last${rangeHours}hours?unitGroup=us&timezone=America/Chicago&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
+    function formatVCDate(d) {
+    return d.toISOString().split(".")[0]; // Remove milliseconds
+    }
+    const start = new Date(timeHistory[0]);
+    const end = new Date(timeHistory[timeHistory.length - 1]);
+    const vcUrl = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${formatVCDate(start)}/${formatVCDate(end)}?unitGroup=us&key=YOUR_KEY&include=hours&contentType=json&timezone=America/Chicago`;
 
     try {
         // Check cache first
