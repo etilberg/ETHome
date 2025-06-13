@@ -238,109 +238,61 @@ function resetZoomOnAllCharts() {
 
 
 // --- Fetch Historical Data for Temp Monitor ---
-function fetchTempMonitorHistoricalData(rangeHours = 1) {
-    console.log(`DEBUG: Fetching Temp Monitor historical data for last ${rangeHours} hours.`);
+async function fetchTempMonitorHistoricalData(rangeHours) {
+  console.debug(`DEBUG: Fetching Temp Monitor historical data for last ${rangeHours} hours.`);
 
-    if (!TEMP_MONITOR_HISTORY_CSV_URL || TEMP_MONITOR_HISTORY_CSV_URL.includes("YOUR_")) {
-        console.error("DEBUG: TEMP_MONITOR_HISTORY_CSV_URL is not set or still a placeholder.");
-        return;
+  try {
+    const response = await fetch(TEMP_MONITOR_HISTORY_CSV_URL);
+    const text = await response.text();
+    const rows = text.trim().split('\n').map(line => line.split(','));
+
+    const header = rows[0];
+    const timestampIndex = header.indexOf('Timestamp');
+    const garageIndex = header.indexOf('GarageTemp');
+    const freezerIndex = header.indexOf('FreezerTemp');
+    const fridgeIndex = header.indexOf('FridgeTemp');
+    const heaterOnIndex = header.indexOf('HeaterStatus');
+
+    const timeHistory = [];
+    const fridgeHistory = [];
+    const freezerHistory = [];
+    const garageHistory = [];
+    const heaterStatus = [];
+
+    const now = Date.now();
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const timestamp = new Date(row[timestampIndex]);
+      if (isNaN(timestamp)) continue;
+
+      const diffHours = (now - timestamp.getTime()) / 1000 / 3600;
+      if (diffHours > rangeHours) continue;
+
+      timeHistory.push(timestamp);
+      fridgeHistory.push(parseFloat(row[fridgeIndex]));
+      freezerHistory.push(parseFloat(row[freezerIndex]));
+      garageHistory.push(parseFloat(row[garageIndex]));
+      heaterStatus.push(parseInt(row[heaterOnIndex]));
     }
 
-    fetch(TEMP_MONITOR_HISTORY_CSV_URL)
-        .then(response => {
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            return response.text();
-        })
-        .then(csvText => {
-            const lines = csvText.trim().split('\n');
-            if (lines.length <= 1) {
-                console.warn("DEBUG: Temp CSV has no data rows.");
-                return;
-            fridgeChartInstance.data.datasets[0].data = fridgeHistory;
-            }
+    console.debug(`DEBUG: Loaded ${timeHistory.length} points of fridge/freezer/garage history.`);
 
-            const now = new Date();
+    await fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours); // ✅ FIXED: now passing rangeHours
 
-            // Clear existing history arrays
-            timeHistory.length = 0;
-            fridgeHistory.length = 0;
-            freezerHistory.length = 0;
-            garageHistory.length = 0;
-            heaterStatusHistory.length = 0;
+    updateFridgeChart(timeHistory, fridgeHistory, heaterStatus);
+    updateFreezerChart(timeHistory, freezerHistory);
+    updateGarageChart(timeHistory, garageHistory);
 
+    updateMinMaxDisplay(fridgeHistory, 'fridge-stats');
+    updateMinMaxDisplay(freezerHistory, 'freezer-stats');
+    updateMinMaxDisplay(garageHistory, 'garage-stats');
 
-            let lastHeaterRunTime = null;
-            let lastHeaterStatus = null;
-
-            // Parse CSV rows
-            lines.slice(1).forEach(line => {
-                const cols = line.split(',');
-                const ts = new Date(cols[0]);
-
-                if (isNaN(ts.getTime())) return;
-
-                const diffHours = (now - ts) / (1000 * 60 * 60);
-                if (diffHours > rangeHours) return;
-
-                timeHistory.push(ts);
-                garageHistory.push(parseFloat(cols[1]));   // GarageTemp
-                freezerHistory.push(parseFloat(cols[2]));  // FreezerTemp
-                fridgeHistory.push(parseFloat(cols[3]));   // FridgeTemp
-                lastHeaterRunTime = parseFloat(cols[4]);
-                heaterStatusHistory.push(parseInt(cols[5].trim().replace('\r', ''))); // HeaterStatus (0 or 1)lastHeaterStatus = parseInt(cols[5]);
-            });
-
-            console.log(`DEBUG: Loaded ${timeHistory.length} points of fridge/freezer/garage history.`);
-
-            if (fridgeChartInstance) {
-                fridgeChartInstance.data.labels = timeHistory;
-                fridgeChartInstance.data.datasets[0].data = fridgeHistory;        //fridge temperature
-                fridgeChartInstance.data.datasets[1].data = heaterStatusHistory;    // Heater On/Off
-                fridgeChartInstance.update();
-            }
-            if (freezerChartInstance) {
-                freezerChartInstance.data.labels = timeHistory;
-                freezerChartInstance.data.datasets[0].data = freezerHistory;
-                freezerChartInstance.update();
-            }
-            if (garageChartInstance) {
-                garageChartInstance.data.labels = timeHistory;
-                garageChartInstance.data.datasets[0].data = garageHistory;
-                garageChartInstance.update();
-            }
-          
-            //  ---MIN/MAX ---
-            const fridgeMinMax = calculateMinMax(fridgeHistory);
-            const freezerMinMax = calculateMinMax(freezerHistory);
-            const garageMinMax = calculateMinMax(garageHistory);
-            document.getElementById('fridge-stats').innerHTML =
-              `24h High: <span class="temp-high">${fridgeMinMax.max?.toFixed(1) ?? '--'}°F</span> | ` +
-              `Low: <span class="temp-low">${fridgeMinMax.min?.toFixed(1) ?? '--'}°F</span>`;
-            
-             document.getElementById('freezer-stats').innerHTML =
-              `24h High: <span class="temp-high">${freezerMinMax.max?.toFixed(1) ?? '--'}°F</span> | ` +
-              `Low: <span class="temp-low">${freezerMinMax.min?.toFixed(1) ?? '--'}°F</span>`;
-            
-            document.getElementById('garage-stats').innerHTML =
-              `24h High: <span class="temp-high">${garageMinMax.max?.toFixed(1) ?? '--'}°F</span> | ` +
-              `Low: <span class="temp-low">${garageMinMax.min?.toFixed(1) ?? '--'}°F</span>`;
-
-            //console.log("DEBUG: Fridge history:", fridgeHistory);
-            //console.log("DEBUG: Fridge min/max:", fridgeMinMax);
-
-            // Update heater live display with last values in range
-            if (lastHeaterRunTime !== null && liveHeaterValueElement) {
-                liveHeaterValueElement.textContent = lastHeaterRunTime.toFixed(2);
-            }
-            if (lastHeaterStatus !== null && liveHeaterStatusElement) {
-                liveHeaterStatusElement.textContent = lastHeaterStatus === 1 ? "On" : "Off";
-            }
-        })
-        .catch(err => {
-            console.error("DEBUG: Failed to fetch historical temp data:", err);
-        });
-  fetchVisualCrossingOutdoorTemps(rangeHours);
+  } catch (err) {
+    console.error("Failed to load Temp Monitor historical data:", err);
+  }
 }
+
 
 // --- Fetch Historical Data for Sump Pump ---
 function fetchSumpHistoricalData(rangeHours) {
