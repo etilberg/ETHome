@@ -580,7 +580,6 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
     const cacheKey = `outdoorTemps_${rangeHours}h_${timeHistory.length}`;
     const cacheDurationMinutes = 60;
 
-    //const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown%2C%20sd/last${rangeHours}hours?unitGroup=us&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
     const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown%2C%20sd/last${rangeHours}hours?unitGroup=us&timezone=America/Chicago&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
 
     try {
@@ -628,6 +627,11 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
             throw new Error("No hourly outdoor temperature data found");
         }
 
+        // ✅ DEBUG: Print time coverage
+        console.log("DEBUG: First 5 hourly outdoor temps:", hourlyData.slice(0, 5).map(h => h.time.toISOString()));
+        console.log("DEBUG: Last 5 hourly outdoor temps:", hourlyData.slice(-5).map(h => h.time.toISOString()));
+
+        // Save to cache
         localStorage.setItem(cacheKey, JSON.stringify({
             timestamp: Date.now(),
             data: hourlyData
@@ -637,14 +641,9 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
 
     } catch (err) {
         console.error("DEBUG: Failed to fetch or process Visual Crossing data:", err.message || err);
-        console.log("DEBUG: First 5 hourly outdoor temps:");
-        console.log(hourlyData.slice(0, 5).map(h => h.time.toISOString()));
-        console.log("DEBUG: Last 5 hourly outdoor temps:");
-        console.log(hourlyData.slice(-5).map(h => h.time.toISOString()));
 
-        // Attempt fallback to stale cache
-       /* 
-       const stale = localStorage.getItem(cacheKey);
+        // Fallback to last known good cache
+        const stale = localStorage.getItem(cacheKey);
         if (stale) {
             try {
                 const parsed = JSON.parse(stale);
@@ -654,23 +653,9 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
                 console.warn("DEBUG: Stale cache also invalid.");
             }
         }
-        */
-      // try/catch block around JSON.parse() already exists
-        if (cached) {
-            try {
-                const parsed = JSON.parse(cached);
-                const ageMinutes = (Date.now() - parsed.timestamp) / 1000 / 60;
-        
-                console.warn(`DEBUG: Using outdoor temp cache (${ageMinutes.toFixed(1)} min old) even though it may be stale`);
-                applyOutdoorTemps(parsed.data);
-                return;
-            } catch (e) {
-                console.warn("DEBUG: Failed to parse stale cache");
-            }
-        }
-
     }
 }
+
 function applyOutdoorTemps(hourlyData) {
     outdoorTempHistory.length = 0;
 
