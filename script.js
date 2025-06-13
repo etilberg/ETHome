@@ -664,7 +664,8 @@ function applyOutdoorTemps(hourlyData) {
         let closestTemp = null;
         let closestDiff = Infinity;
 
-        for (const hour of hourlyData) {
+        for (let j = 0; j < hourlyData.length; j++) {
+            const hour = hourlyData[j];
             const diff = Math.abs(hour.time - ts);
             if (diff < closestDiff) {
                 closestDiff = diff;
@@ -672,13 +673,12 @@ function applyOutdoorTemps(hourlyData) {
             }
         }
 
-        // Always push a value (even if repeated)
+        // Always push a value — repeated if needed
         outdoorTempHistory.push(closestTemp ?? null);
     }
 
     console.log(`DEBUG: Mapped ${outdoorTempHistory.length} outdoor temps to ${timeHistory.length} garage timestamps.`);
 
-    // Update garage chart if ready
     if (garageChartInstance && garageChartInstance.data.datasets[1]) {
         garageChartInstance.data.datasets[1].data = outdoorTempHistory;
         garageChartInstance.update();
