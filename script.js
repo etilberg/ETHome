@@ -69,6 +69,7 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
                 data: [],
                 borderColor: borderColor,
                 borderWidth: 2,
+                pointRadius: 0,             // hide data points
                 fill: false,
                 tension: 0.1
             }]
@@ -153,6 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 backgroundColor: 'rgba(125, 75, 0, 0.1)',
                 yAxisID: 'y2',
                 stepped: true,
+                pointRadius: 0,             // hide data points
                 borderWidth: 2,
                 fill: 'origin'
             });
@@ -187,7 +189,9 @@ document.addEventListener('DOMContentLoaded', () => {
             borderColor: 'rgb(255, 99, 132)', // A different color for the outdoor temp
             borderWidth: 2,
             fill: false,
-            tension: 0.1,
+            borderDash: [5, 5],         // optional dashed line
+            pointRadius: 0,             // hide data points
+            tension: 0.4,
             yAxisID: 'y' // Ensure this matches the garage chart's y-axis ID
         });
         // Update the chart to show the newly added data
@@ -634,12 +638,13 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
             throw new Error("Missing or invalid `days` array in response");
         }
 
-        const hourlyData = data.days.flatMap(day =>
-            day.hours.map(hour => ({
-                time: new Date(hour.datetimeEpoch * 1000),
-                temp: hour.temp
-            }))
+         const hourlyData = data.days.flatMap(day =>
+          day.hours.map(hour => ({
+            time: new Date(hour.datetimeEpoch * 1000), // epoch is in local time per Visual Crossing when using timezone param
+            temp: hour.temp
+          }))
         );
+
 
         if (!hourlyData.length) {
             throw new Error("No hourly outdoor temperature data found");
@@ -671,31 +676,31 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
     }
 }
 
-function applyOutdoorTemps(hourlyData) {
-    outdoorTempHistory.length = 0;
+function applyOutdoorTemps(hourlyTemps) {
+  const outdoorTemps = [];
+  let currentIndex = 0;
 
-    for (let i = 0; i < timeHistory.length; i++) {
-        const ts = timeHistory[i];
-        let closestTemp = null;
-        let closestDiff = Infinity;
-
-        for (let j = 0; j < hourlyData.length; j++) {
-            const hour = hourlyData[j];
-            const diff = Math.abs(hour.time - ts);
-            if (diff < closestDiff) {
-                closestDiff = diff;
-                closestTemp = hour.temp;
-            }
-        }
-
-        // Always push a value — repeated if needed
-        outdoorTempHistory.push(closestTemp ?? null);
+  for (const t of timeHistory) {
+    const timestamp = new Date(t);
+    while (
+      currentIndex < hourlyTemps.length - 1 &&
+      hourlyTemps[currentIndex + 1].time <= timestamp
+    ) {
+      currentIndex++;
     }
 
-    console.log(`DEBUG: Mapped ${outdoorTempHistory.length} outdoor temps to ${timeHistory.length} garage timestamps.`);
+    const outdoor = hourlyTemps[currentIndex];
+    outdoorTemps.push(outdoor?.temp ?? null);
+  }
 
-    if (garageChartInstance && garageChartInstance.data.datasets[1]) {
-        garageChartInstance.data.datasets[1].data = outdoorTempHistory;
-        garageChartInstance.update();
+  // Set the data on garage chart
+  if (charts.garageChart) {
+    const outdoorDataset = charts.garageChart.data.datasets.find(ds => ds.label === "Outdoor Temp");
+    if (outdoorDataset) {
+      outdoorDataset.data = outdoorTemps;
+      charts.garageChart.update();
     }
+  }
+
+  console.log(`DEBUG: Mapped ${outdoorTemps.filter(v => v !== null).length} outdoor temps to ${timeHistory.length} garage timestamps.`);
 }
