@@ -313,7 +313,7 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
               `24h High: <span class="temp-high">${fridgeMinMax.max?.toFixed(1) ?? '--'}°F</span> | ` +
               `Low: <span class="temp-low">${fridgeMinMax.min?.toFixed(1) ?? '--'}°F</span>`;
             
-            document.getElementById('freezer-stats').innerHTML =
+             document.getElementById('freezer-stats').innerHTML =
               `24h High: <span class="temp-high">${freezerMinMax.max?.toFixed(1) ?? '--'}°F</span> | ` +
               `Low: <span class="temp-low">${freezerMinMax.min?.toFixed(1) ?? '--'}°F</span>`;
             
@@ -580,7 +580,8 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
     const cacheKey = `outdoorTemps_${rangeHours}h_${timeHistory.length}`;
     const cacheDurationMinutes = 60;
 
-    const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown%2C%20sd/last${rangeHours}hours?unitGroup=us&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
+    //const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown%2C%20sd/last${rangeHours}hours?unitGroup=us&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
+    const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown%2C%20sd/last${rangeHours}hours?unitGroup=us&timezone=America/Chicago&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
 
     try {
         // Check cache first
@@ -665,6 +666,10 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
         }
 
     }
+  console.log("DEBUG: First 5 hourly outdoor temps:");
+  console.log(hourlyData.slice(0, 5).map(h => h.time.toISOString()));
+  console.log("DEBUG: Last 5 hourly outdoor temps:");
+  console.log(hourlyData.slice(-5).map(h => h.time.toISOString()));
 }
 function applyOutdoorTemps(hourlyData) {
     outdoorTempHistory.length = 0;
