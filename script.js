@@ -581,20 +581,25 @@ function connectSumpMonitorSSE() {
 }
 
 async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
+    if (rangeHours < 3) {
+        console.warn("DEBUG: Outdoor temp resolution too coarse for <3h range");
+        return;
+    }
     if (!timeHistory.length) {
         console.warn("DEBUG: Skipping outdoor temp fetch — timeHistory is empty.");
         return;
     }
 
-    function formatVCDate(d) {
-        if (!(d instanceof Date) || isNaN(d)) return null;
-        return d.toISOString().split(".")[0]; // remove milliseconds
+    function formatVCDateLocal(date) {
+      return date.toLocaleString("sv-SE", { timeZone: "America/Chicago" }).replace(" ", "T").slice(0, 16);
     }
+
 
     const start = new Date(timeHistory[0]);
     const end = new Date(timeHistory[timeHistory.length - 1]);
-    const startStr = formatVCDate(start);
-    const endStr = formatVCDate(end);
+    const startStr = formatVCDateLocal(start);
+    const endStr = formatVCDateLocal(end);
+
 
     if (!startStr || !endStr) {
         console.warn("DEBUG: Invalid start or end time for Visual Crossing request.");
@@ -638,12 +643,12 @@ async function fetchVisualCrossingOutdoorTemps(rangeHours = 24) {
             throw new Error("Missing or invalid `days` array in response");
         }
 
-         const hourlyData = data.days.flatMap(day =>
+        const hourlyData = data.days.flatMap(day =>
           day.hours.map(hour => ({
-            time: new Date(hour.datetimeEpoch * 1000), // epoch is in local time per Visual Crossing when using timezone param
+            time: new Date(hour.datetimeEpoch * 1000),
             temp: hour.temp
           }))
-        );
+        ).filter(h => h.time >= start && h.time <= end);
 
 
         if (!hourlyData.length) {
