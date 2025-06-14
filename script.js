@@ -26,6 +26,8 @@ let freezerHistory = [];
 let garageHistory = [];
 let heaterStatusHistory = [];
 let outdoorTempHistory = [];
+let garageOutdoorTemps = []; 
+let outdoorTempCache = {}; 
 
 let sumpTimeHistory = [];
 let sumpTempHistory = [];
@@ -584,88 +586,85 @@ function connectSumpMonitorSSE() {
 }
 
 async function fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours) {
-  console.debug("DEBUG: Fetching outdoor temps for", rangeHours, "hours");
+    console.debug(`DEBUG: Fetching outdoor temps for ${rangeHours} hours`);
 
-  if (!timeHistory || timeHistory.length === 0) {
-    console.debug("DEBUG: Outdoor temp fetch skipped — timeHistory is empty.");
-    return;
-  }
-
-  // Prevent querying if range is too short for hourly data
-  if (rangeHours < 3) {
-    console.debug("DEBUG: Outdoor temp resolution too coarse for <3h range");
-    return;
-  }
-
-  // Format: YYYY-MM-DDTHH:mm:ss
-  function formatVCDate(date) {
-    return date.toISOString().split('.')[0];
-  }
-
-  const start = timeHistory[0];
-  const end = timeHistory[timeHistory.length - 1];
-  const startDateStr = formatVCDate(new Date(start));
-  const endDateStr = formatVCDate(new Date(end));
-
-  const cacheKey = `vc_outdoor_${startDateStr}_${endDateStr}`;
-  const cacheMinutes = 15;
-  const cached = outdoorTempCache[cacheKey];
-  const now = Date.now();
-
-  if (cached && (now - cached.timestamp < cacheMinutes * 60000) && cached.data.length >= timeHistory.length * 0.8) {
-    console.debug(`DEBUG: Using cached outdoor temp data (${((now - cached.timestamp) / 60000).toFixed(1)} min old) for ${cached.data.length} timestamps`);
-    garageOutdoorTemps = cached.data;
-    return;
-  }
-
-  const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${startDateStr}/${endDateStr}?unitGroup=us&timezone=America/Chicago&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
-
-  console.debug("DEBUG: Fetching Visual Crossing weather data:", url);
-
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-    const json = await res.json();
-
-    const hours = (json.days || []).flatMap(day => day.hours || []);
-    const outdoorTimeTempMap = new Map();
-
-    for (const hour of hours) {
-      const ts = new Date(hour.datetimeEpoch * 1000).getTime();
-      outdoorTimeTempMap.set(ts, hour.temp);
+    if (!timeHistory || timeHistory.length === 0) {
+        console.debug("DEBUG: Outdoor temp fetch skipped — timeHistory is empty.");
+        return;
     }
 
-    const mappedTemps = timeHistory.map(t => {
-      const hourTs = Math.floor(t / 3600000) * 3600000;
-      return outdoorTimeTempMap.get(hourTs) ?? null;
-    });
-
-    console.debug("DEBUG: First 5 hourly outdoor temps:", hours.slice(0, 5).map(h => new Date(h.datetimeEpoch * 1000).toISOString()));
-    console.debug("DEBUG: Last 5 hourly outdoor temps:", hours.slice(-5).map(h => new Date(h.datetimeEpoch * 1000).toISOString()));
-    console.debug(`DEBUG: Mapped ${mappedTemps.filter(v => v !== null).length} outdoor temps to ${timeHistory.length} garage timestamps.`);
-
-    garageOutdoorTemps = mappedTemps;
-    outdoorTempCache[cacheKey] = { timestamp: now, data: mappedTemps };
-
-    // Update the chart
-    if (charts && charts.garageChart) {
-      const outdoorDataset = charts.garageChart.data.datasets.find(d => d.label === "Outdoor Temp");
-      if (outdoorDataset) {
-        outdoorDataset.data = mappedTemps;
-        charts.garageChart.update();
-      }
+    // Prevent querying if range is too short for hourly data
+    if (rangeHours < 3) {
+        console.debug("DEBUG: Outdoor temp resolution too coarse for <3h range");
+        return;
     }
-  } catch (error) {
-    console.debug("DEBUG: Failed to fetch or process Visual Crossing data:", error.message);
-    if (cached && cached.data) {
-      console.debug("DEBUG: Using stale outdoor temp cache due to fetch failure.");
-      garageOutdoorTemps = cached.data;
-    } else {
-      console.debug("DEBUG: Stale cache also invalid.");
+
+    // Format: YYYY-MM-DDTHH:mm:ss
+    function formatVCDate(date) {
+        // Ensure date is a valid Date object before calling methods on it
+        const d = new Date(date);
+        if (isNaN(d.getTime())) {
+            throw new Error("Invalid time value provided to formatVCDate");
+        }
+        return d.toISOString().split('.')[0];
     }
-  }
+
+    try {
+        const start = timeHistory[0];
+        const end = timeHistory[timeHistory.length - 1];
+        const startDateStr = formatVCDate(start);
+        const endDateStr = formatVCDate(end);
+
+        const cacheKey = `vc_outdoor_${startDateStr}_${endDateStr}`;
+        const cacheMinutes = 15;
+        const cached = outdoorTempCache[cacheKey];
+        const now = Date.now();
+
+        if (cached && (now - cached.timestamp < cacheMinutes * 60000)) {
+            console.debug(`DEBUG: Using cached outdoor temp data.`);
+            garageOutdoorTemps = cached.data;
+        } else {
+            const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${startDateStr}/${endDateStr}?unitGroup=us&timezone=America/Chicago&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
+            console.debug("DEBUG: Fetching Visual Crossing weather data:", url);
+
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+            const json = await res.json();
+
+            const hours = (json.days || []).flatMap(day => day.hours || []);
+            const outdoorTimeTempMap = new Map();
+
+            for (const hour of hours) {
+                const ts = new Date(hour.datetimeEpoch * 1000).getTime();
+                outdoorTimeTempMap.set(ts, hour.temp);
+            }
+
+            const mappedTemps = timeHistory.map(t => {
+                const date = new Date(t);
+                // Round the timestamp down to the beginning of the hour
+                const hourTs = Math.floor(date.getTime() / 3600000) * 3600000;
+                return outdoorTimeTempMap.get(hourTs) ?? null;
+            });
+
+            garageOutdoorTemps = mappedTemps;
+            outdoorTempCache[cacheKey] = { timestamp: now, data: mappedTemps };
+        }
+
+        // *** FIX: Use the correct chart instance variable 'garageChartInstance' ***
+        if (garageChartInstance) {
+            const outdoorDataset = garageChartInstance.data.datasets.find(d => d.label === "Outdoor Temp (°F)");
+            if (outdoorDataset) {
+                outdoorDataset.data = garageOutdoorTemps;
+                // Important: The labels for the garage chart should still be the main 'timeHistory'
+                garageChartInstance.data.labels = timeHistory;
+                garageChartInstance.update();
+                console.debug(`DEBUG: Updated garage chart with ${garageOutdoorTemps.filter(v => v !== null).length} outdoor temp points.`);
+            }
+        }
+    } catch (error) {
+        console.error("DEBUG: Failed to fetch or process Visual Crossing data:", error);
+    }
 }
-
 
 function applyOutdoorTemps(hourlyTemps) {
   const outdoorTemps = [];
