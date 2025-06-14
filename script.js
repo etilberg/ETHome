@@ -256,6 +256,7 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
             if (lines.length <= 1) {
                 console.warn("DEBUG: Temp CSV has no data rows.");
                 return;
+            
             fridgeChartInstance.data.datasets[0].data = fridgeHistory;
             }
 
@@ -335,11 +336,13 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
             if (lastHeaterStatus !== null && liveHeaterStatusElement) {
                 liveHeaterStatusElement.textContent = lastHeaterStatus === 1 ? "On" : "Off";
             }
+            if (timeHistory.length > 0) {
+                fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours);
+            }
         })
         .catch(err => {
             console.error("DEBUG: Failed to fetch historical temp data:", err);
         });
-  fetchVisualCrossingOutdoorTemps(rangeHours);
 }
 
 // --- Fetch Historical Data for Sump Pump ---
