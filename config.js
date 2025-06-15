@@ -3,7 +3,12 @@
 // !! IMPORTANT: Replace these placeholders with your actual Device IDs and Access Tokens !!
 // !! SECURITY WARNING: These values are still visible in browser source code.
 // !! Avoid committing actual tokens to public repositories if security is critical.
+// config.js
 
+const VISUAL_CROSSING_API_KEY = "67YNPN46DR5ATZVK8QMXT54HL";
+
+// -- Device 1: Fridge/Freezer Monitor --
+// ... (rest of the file)
 // -- Device 1: Fridge/Freezer Monitor --
 const TEMP_MONITOR_DEVICE_ID = "240039000e47353136383631";
 const TEMP_MONITOR_ACCESS_TOKEN = "28f3c69720f69b2ffbdcdd0534b67f49e4f1030e";
