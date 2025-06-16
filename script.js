@@ -81,7 +81,7 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
                 x: {
                     type: 'category',
                     title: {
-                        display: true,
+                        display: false,
                         text: 'Date'
                     }
                 },
