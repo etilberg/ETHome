@@ -79,7 +79,7 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
             maintainAspectRatio: false,
             scales: {
                 x: {
-                    type: 'category',
+                     type: 'time',
                     title: {
                         display: false,
                         text: 'Date'
