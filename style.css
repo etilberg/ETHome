@@ -153,3 +153,7 @@ small {
     padding-top: 10px;
     border-top: 1px solid #333;
 }
+/* A larger container for taller charts like bar charts */
+.chart-container-large {
+    height: 35vh;
+}
