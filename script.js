@@ -240,11 +240,22 @@ document.addEventListener('DOMContentLoaded', () => {
     sumpSinceRunChartInstance = createChart('sumpSinceRunChart', 'Time Since Last Run (min)', 'rgb(201, 203, 207)', 'Minutes');
     //console.log("DEBUG: Charts initialization attempted.");
 // ======================= INITIALIZE THE RunsPerDay CHART =======================
-  sumpRunsPerDayChartInstance = createChart('sumpRunsPerDayChart', 'Total Runs', 'rgb(186, 85, 211)', 'Number of Runs');
-  if (sumpRunsPerDayChartInstance) {
-      sumpRunsPerDayChartInstance.config.type = 'bar'; // Set chart type to bar
-      sumpRunsPerDayChartInstance.update();
-  }
+sumpRunsPerDayChartInstance = createChart('sumpRunsPerDayChart', 'Total Runs', 'rgb(186, 85, 211)', 'Number of Runs');
+if (sumpRunsPerDayChartInstance) {
+    sumpRunsPerDayChartInstance.config.type = 'bar'; // Set chart type to bar
+
+    // --- Customize the tooltip to show the full date ---
+    sumpRunsPerDayChartInstance.options.plugins.tooltip = {
+        callbacks: {
+            title: function(tooltipItems) {
+                // The 'label' property of the first tooltip item contains our date string
+                return tooltipItems[0].label;
+            }
+        }
+    };
+
+    sumpRunsPerDayChartInstance.update();
+}
     // Start SSE connections
     connectTempMonitorSSE();
     connectSumpMonitorSSE();
