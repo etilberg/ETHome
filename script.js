@@ -240,7 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
     sumpSinceRunChartInstance = createChart('sumpSinceRunChart', 'Time Since Last Run (min)', 'rgb(201, 203, 207)', 'Minutes');
     //console.log("DEBUG: Charts initialization attempted.");
 // ======================= INITIALIZE THE RunsPerDay CHART =======================
-sumpRunsPerDayChartInstance = createChart('sumpRunsPerDayChart', 'Total Runs', 'rgb(186, 85, 211)', 'Number of Runs');
+sumpRunsPerDayChartInstance = createChart('sumpRunsPerDayChart', 'Total Runs', 'rgb(129, 201, 149)', 'Number of Runs');
 if (sumpRunsPerDayChartInstance) {
     sumpRunsPerDayChartInstance.config.type = 'bar'; // Set chart type to bar
 
@@ -267,7 +267,6 @@ if (sumpRunsPerDayChartInstance) {
     
     // ======================= CALL THE NEW ANALYTICS FETCH =======================
     fetchSumpAnalyticsData();
-
 });
 
 // ... (rest of your script.js: history-range listener, resetZoomOnAllCharts, fetch functions, SSE connection functions) ...
@@ -292,8 +291,6 @@ function resetZoomOnAllCharts() {
     if (sumpRuntimeChartInstance) sumpRuntimeChartInstance.resetZoom();
     if (sumpSinceRunChartInstance) sumpSinceRunChartInstance.resetZoom();
 }
-
-
 // --- Fetch Historical Data for Temp Monitor ---
 function fetchTempMonitorHistoricalData(rangeHours = 1) {
     console.log(`DEBUG: Fetching Temp Monitor historical data for last ${rangeHours} hours.`);
@@ -399,7 +396,7 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
         })
         .catch(err => {
             console.error("DEBUG: Failed to fetch historical temp data:", err);
-        });
+    });
 }
 
 // --- Fetch Historical Data for Sump Pump ---
