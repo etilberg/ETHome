@@ -110,3 +110,46 @@ small {
     text-align: right;
     margin-top: 5px;
 }
+/* --- Current Weather Display Styles --- */
+#weather-display-container {
+    font-family: Arial, sans-serif;
+    background-color: #1e1e1e; /* Match section background */
+    padding: 15px 20px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.5); /* Match section shadow */
+    border: 1px solid #333;
+}
+#weather-location {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #90caf9; /* Match H2 color */
+    padding-bottom: 10px;
+    border-bottom: 1px solid #333;
+}
+#current-weather {
+    display: flex;
+    align-items: center;
+    padding: 10px 0;
+}
+#current-temp {
+    font-size: 3em;
+    font-weight: bold;
+    color: #e0e0e0; /* Match main text color */
+    margin-right: 20px;
+}
+#current-details {
+    font-size: 0.9em;
+    color: #b0bec5; /* Match H3 color */
+}
+#current-condition {
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+#forecast-synopsis p {
+    font-size: 0.9em;
+    color: #ccc;
+    margin: 0;
+    padding-top: 10px;
+    border-top: 1px solid #333;
+}
