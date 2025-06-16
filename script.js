@@ -47,9 +47,7 @@ function calculateMinMax(array) {
   };
 }
 
-// *******************************************************************
-// *** MOVE createChart FUNCTION DEFINITION HERE (BEFORE DOMContentLoaded) ***
-// *******************************************************************
+
 function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)') {
     const canvasElement = document.getElementById(canvasId);
     if (!canvasElement) {
@@ -132,9 +130,47 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
         }
     });
 }
+// --- Function to Fetch and Display Current Weather ---
+async function displayCurrentWeather() {
+    if (typeof VISUAL_CROSSING_API_KEY === 'undefined' || VISUAL_CROSSING_API_KEY.includes("YOUR_")) {
+        console.error("DEBUG: Visual Crossing API Key not set in config.js");
+        return;
+    }
 
+    const location = 'Watertown,SD';
+    const apiUrl = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/<span class="math-inline">\{location\}/today?unitGroup\=us&include\=current&key\=</span>{VISUAL_CROSSING_API_KEY}&contentType=json`;
+
+    try {
+        const response = await fetch(apiUrl);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+
+        const currentConditions = data.currentConditions;
+        const todayForecast = data.days[0];
+
+        const currentTemp = Math.round(currentConditions.temp);
+        const dailyHigh = Math.round(todayForecast.tempmax);
+        const dailyLow = Math.round(todayForecast.tempmin);
+        const windSpeed = Math.round(currentConditions.windspeed);
+        const conditions = currentConditions.conditions;
+        const synopsis = todayForecast.description;
+
+        document.getElementById('current-temp').textContent = `${currentTemp}°F`;
+        document.getElementById('current-condition').textContent = conditions;
+        document.getElementById('high-low').textContent = `H: ${dailyHigh}° / L: ${dailyLow}°`;
+        document.getElementById('wind-speed').textContent = `Wind: ${windSpeed} mph`;
+        document.getElementById('forecast-synopsis').querySelector('p').textContent = synopsis;
+
+    } catch (error) {
+        console.error("Could not fetch current weather:", error);
+        document.getElementById('weather-location').textContent = "Weather data unavailable.";
+    }
+}
 // --- Initialize Charts and Load Initial Data ---
 document.addEventListener('DOMContentLoaded', () => {
+    displayCurrentWeather();
     //console.log("DEBUG: DOM loaded, initializing charts.");
     if (typeof TEMP_MONITOR_DEVICE_ID === 'undefined' || typeof TEMP_MONITOR_HISTORY_CSV_URL === 'undefined') {
         console.error("DEBUG: Configuration variables from config.js seem to be missing!");
@@ -624,7 +660,7 @@ async function fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours) {
             console.debug(`DEBUG: Using cached outdoor temp data.`);
             garageOutdoorTemps = cached.data;
         } else {
-            const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${startDateStr}/${endDateStr}?unitGroup=us&timezone=America/Chicago&key=67YNPN46DR5ATZVK8QMXT54HL&include=hours&contentType=json`;
+            const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/<span class="math-inline">\{startDateStr\}/</span>{endDateStr}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
             console.debug("DEBUG: Fetching Visual Crossing weather data:", url);
 
             const res = await fetch(url);
