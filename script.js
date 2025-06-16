@@ -138,8 +138,7 @@ async function displayCurrentWeather() {
     }
 
     const location = 'Watertown,SD';
-    const apiUrl = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/<span class="math-inline">\{location\}/today?unitGroup\=us&include\=current&key\=</span>{VISUAL_CROSSING_API_KEY}&contentType=json`;
-
+    const apiUrl = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/${location}/today?unitGroup=us&include=current&key=${VISUAL_CROSSING_API_KEY}&contentType=json`;
     try {
         const response = await fetch(apiUrl);
         if (!response.ok) {
@@ -660,8 +659,8 @@ async function fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours) {
             console.debug(`DEBUG: Using cached outdoor temp data.`);
             garageOutdoorTemps = cached.data;
         } else {
-            const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/<span class="math-inline">\{startDateStr\}/</span>{endDateStr}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
-            console.debug("DEBUG: Fetching Visual Crossing weather data:", url);
+          const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${startDateStr}/${endDateStr}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
+          console.debug("DEBUG: Fetching Visual Crossing weather data:", url);
 
             const res = await fetch(url);
             if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
