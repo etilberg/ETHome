@@ -256,7 +256,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // ======================= CALL THE NEW ANALYTICS FETCH =======================
     fetchSumpAnalyticsData();
-    });
+
 });
 
 // ... (rest of your script.js: history-range listener, resetZoomOnAllCharts, fetch functions, SSE connection functions) ...
