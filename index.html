@@ -13,20 +13,30 @@
 
 </head>
 <body>
-
-    <h1>ET Home Dashboard</h1>
+    <div id="weather-display-container">
+    <div id="weather-location">Watertown, SD</div>
+    <div id="current-weather">
+        <div id="current-temp">--°F</div>
+        <div id="current-details">
+            <div id="current-condition">--</div>
+            <div id="high-low">H: --° / L: --°</div>
+            <div id="wind-speed">Wind: -- mph</div>
+        </div>
+    </div>
+    <div id="forecast-synopsis">
+        <p>--</p>
+    </div>
+    </div>
     <section id="historical-data-section">
         <label for="history-range">Select History Range:</label>
             <select id="history-range">
                 <option value="1">Last 1 Hour</option>
-                <option value="2" selected>Last 2 Hours</option>
-                <option value="4">Last 4 Hours</option>
+                <option value="2">Last 2 Hours</option>
+                <option value="4"selected>Last 4 Hours</option>
                 <option value="12">Last 12 Hours</option>
-                <option value="24">Last 24 Hours</option>
+                <option value="24">Last 24 Hours</option>                
+                <option value="24">Last 48 Hours</option>
             </select>
-        <div id="historical-chart-container-gsheets">
-            Historical data loading...
-        </div>
     </section>
     <section id="temp-monitor-section">
         <h2>Fridge/Freezer Monitor (<span id="temp-monitor-status">Initializing...</span>)</h2>
