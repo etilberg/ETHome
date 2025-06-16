@@ -83,8 +83,8 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
                     title: {
                         display: true,
                         text: 'Date'
-                      }
-                  },
+                      
+					},
                     time: {
                         tooltipFormat: 'h:mm a', // Simplified tooltip
                         displayFormats: {
@@ -110,7 +110,7 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
                         display: true,
                         text: yLabel
                     }
-                }
+                
             },
             plugins: {
                 legend: {
@@ -118,15 +118,15 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
                 },
                 zoom: { // Ensure zoom options are here if you are using the zoom plugin
                     pan: {
-                        enabled: true,
+                        enabled: false,
                         mode: 'x'
                     },
                     zoom: {
                         wheel: {
-                            enabled: true,
+                            enabled: false,
                         },
                         pinch: {
-                            enabled: true
+                            enabled: false
                         },
                         mode: 'x',
                     }
