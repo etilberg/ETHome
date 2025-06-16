@@ -83,7 +83,8 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
                     title: {
                         display: true,
                         text: 'Date'
-                    }
+                      }
+                  },
                     time: {
                         tooltipFormat: 'h:mm a', // Simplified tooltip
                         displayFormats: {
