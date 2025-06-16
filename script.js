@@ -145,7 +145,9 @@ async function displayCurrentWeather() {
 
         document.getElementById('current-temp').textContent = `${currentTemp}°F`;
         document.getElementById('current-condition').textContent = conditions;
-        document.getElementById('high-low').innerHTML = `H: <span class="temp-high"><span class="math-inline">\{dailyHigh\}</span\>° / L\: <span class\="temp\-low"\></span>{dailyLow}</span>°`;
+        //document.getElementById('high-low').innerHTML = `H: <span class="temp-high"><span class="math-inline">\{dailyHigh\}</span\>° / L\: <span class\="temp\-low"\></span>{dailyLow}</span>°`;
+        document.getElementById('high-low').innerHTML = `H: <span class="temp-high">${dailyHigh}°</span> / L: <span class="temp-low">${dailyLow}°</span>`;
+
         document.getElementById('wind-speed').textContent = `Wind: ${windSpeed} mph`;
         document.getElementById('forecast-synopsis').querySelector('p').textContent = synopsis;
 
