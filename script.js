@@ -253,11 +253,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const initialHours = parseInt(document.getElementById('history-range').value, 10);
     fetchTempMonitorHistoricalData(initialHours);
     fetchSumpHistoricalData(initialHours);
-  
-    // Load initial historical data based on default dropdown selection
-    const initialHours = parseInt(document.getElementById('history-range').value, 10);
-    fetchTempMonitorHistoricalData(initialHours);
-    fetchSumpHistoricalData(initialHours);
     
     // ======================= CALL THE NEW ANALYTICS FETCH =======================
     fetchSumpAnalyticsData();
