@@ -38,6 +38,7 @@ let sumpSinceRunHistory = [];
 // --- Chart Instance Variables ---
 let fridgeChartInstance, freezerChartInstance, garageChartInstance;
 let sumpTempChartInstance, sumpPowerChartInstance, sumpRuntimeChartInstance, sumpSinceRunChartInstance;
+let sumpRunsPerDayChartInstance; 
 
 function calculateMinMax(array) {
   if (!array.length) return { min: null, max: null };
@@ -46,7 +47,6 @@ function calculateMinMax(array) {
     max: Math.max(...array)
   };
 }
-
 
 function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)') {
     const canvasElement = document.getElementById(canvasId);
@@ -239,7 +239,12 @@ document.addEventListener('DOMContentLoaded', () => {
     sumpRuntimeChartInstance = createChart('sumpRuntimeChart', 'Sump Runtime (sec)', 'rgb(255, 159, 64)', 'Runtime (seconds)');
     sumpSinceRunChartInstance = createChart('sumpSinceRunChart', 'Time Since Last Run (min)', 'rgb(201, 203, 207)', 'Minutes');
     //console.log("DEBUG: Charts initialization attempted.");
-
+// ======================= INITIALIZE THE RunsPerDay CHART =======================
+  sumpRunsPerDayChartInstance = createChart('sumpRunsPerDayChart', 'Total Runs', 'rgb(186, 85, 211)', 'Number of Runs');
+  if (sumpRunsPerDayChartInstance) {
+      sumpRunsPerDayChartInstance.config.type = 'bar'; // Set chart type to bar
+      sumpRunsPerDayChartInstance.update();
+  }
     // Start SSE connections
     connectTempMonitorSSE();
     connectSumpMonitorSSE();
@@ -248,6 +253,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const initialHours = parseInt(document.getElementById('history-range').value, 10);
     fetchTempMonitorHistoricalData(initialHours);
     fetchSumpHistoricalData(initialHours);
+  
+    // Load initial historical data based on default dropdown selection
+    const initialHours = parseInt(document.getElementById('history-range').value, 10);
+    fetchTempMonitorHistoricalData(initialHours);
+    fetchSumpHistoricalData(initialHours);
+    
+    // ======================= CALL THE NEW ANALYTICS FETCH =======================
+    fetchSumpAnalyticsData();
+    });
 });
 
 // ... (rest of your script.js: history-range listener, resetZoomOnAllCharts, fetch functions, SSE connection functions) ...
@@ -728,4 +742,110 @@ function applyOutdoorTemps(hourlyTemps) {
   }
 
   console.log(`DEBUG: Mapped ${outdoorTemps.filter(v => v !== null).length} outdoor temps to ${timeHistory.length} garage timestamps.`);
+}
+
+// ======================= NEW SUMP PUMP ANALYTICS FUNCTIONS =======================
+
+/**
+ * Processes raw sump data to calculate runs per day and updates the bar chart.
+ * @param {Array} sumpData - An array of objects with { ts, sinceRun } properties.
+ */
+function processSumpAnalytics(sumpData) {
+    if (sumpData.length === 0) {
+        console.warn("DEBUG: No sump data to process for analytics.");
+        return;
+    }
+
+    // Sort data just in case it's not chronological
+    sumpData.sort((a, b) => a.ts - b.ts);
+
+    const runsByDay = new Map();
+    let totalRuns = 0;
+
+    // Loop through the data to identify "runs"
+    for (let i = 1; i < sumpData.length; i++) {
+        const previous = sumpData[i - 1];
+        const current = sumpData[i];
+
+        // A "run" is detected when the timeSinceRun value suddenly drops.
+        if (current.sinceRun < previous.sinceRun) {
+            // Get the date string (e.g., "2025-06-15") for the current run
+            const day = current.ts.toISOString().split('T')[0];
+            const count = (runsByDay.get(day) || 0) + 1;
+            runsByDay.set(day, count);
+            totalRuns++;
+        }
+    }
+
+    console.log(`DEBUG: Processed ${totalRuns} total sump runs across ${runsByDay.size} days.`);
+
+    const labels = [...runsByDay.keys()];
+    const data = [...runsByDay.values()];
+
+    // Calculate the overall average
+    const avgRunsPerDay = runsByDay.size > 0 ? (totalRuns / runsByDay.size).toFixed(1) : 0;
+
+    if (sumpRunsPerDayChartInstance) {
+        sumpRunsPerDayChartInstance.data.labels = labels;
+        sumpRunsPerDayChartInstance.data.datasets[0].data = data;
+        // Update the chart title with the calculated average
+        sumpRunsPerDayChartInstance.options.plugins.title = {
+            display: true,
+            text: `Daily Sump Runs (Avg: ${avgRunsPerDay} per day)`
+        };
+        sumpRunsPerDayChartInstance.update();
+    }
+}
+
+/**
+ * Fetches the full sump history CSV for the last 90 days and processes it.
+ * This runs independently of the dropdown-controlled history fetches.
+ */
+function fetchSumpAnalyticsData() {
+    console.log("DEBUG: Fetching full sump pump history for analytics.");
+
+    if (!SUMP_HISTORY_CSV_URL || SUMP_HISTORY_CSV_URL.includes("YOUR_")) {
+        console.error("DEBUG: SUMP_HISTORY_CSV_URL not set.");
+        return;
+    }
+
+    fetch(SUMP_HISTORY_CSV_URL)
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response.text();
+        })
+        .then(csvText => {
+            const lines = csvText.trim().split('\n');
+            if (lines.length <= 1) return;
+
+            const header = lines.shift().split(',');
+            const tsIdx = header.findIndex(h => h.toLowerCase().includes('timestamp'));
+            const sinceRunIdx = header.findIndex(h => h.toLowerCase().includes('timesince'));
+
+            if (tsIdx === -1 || sinceRunIdx === -1) {
+                console.error("DEBUG: Analytics requires 'timestamp' and 'timeSinceRun' columns in sump CSV.");
+                return;
+            }
+
+            const ninetyDaysAgo = new Date();
+            ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+            const sumpData = lines.map(line => {
+                const cols = line.split(',');
+                const ts = new Date(cols[tsIdx]);
+                // Filter out invalid dates and data older than 90 days
+                if (isNaN(ts.getTime()) || ts < ninetyDaysAgo) {
+                    return null;
+                }
+                return {
+                    ts: ts,
+                    sinceRun: parseFloat(cols[sinceRunIdx])
+                };
+            }).filter(item => item !== null); // Remove null entries
+
+            processSumpAnalytics(sumpData);
+        })
+        .catch(error => {
+            console.error("DEBUG: Failed to fetch sump history for analytics:", error);
+        });
 }
