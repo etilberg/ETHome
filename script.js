@@ -59,7 +59,7 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
         console.error(`DEBUG: Failed to get 2D context for canvas ID '${canvasId}'!`);
         return null;
     }
-    //console.log(`DEBUG: Creating chart for canvas ID '${canvasId}'`);
+
     return new Chart(ctx, {
         type: 'line',
         data: {
@@ -69,7 +69,7 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
                 data: [],
                 borderColor: borderColor,
                 borderWidth: 2,
-                pointRadius: 0,             // hide data points
+                pointRadius: 0,
                 fill: false,
                 tension: 0.1
             }]
@@ -83,25 +83,6 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
                     title: {
                         display: true,
                         text: 'Date'
-                      
-					},
-                    time: {
-                        tooltipFormat: 'h:mm a', // Simplified tooltip
-                        displayFormats: {
-                            millisecond: 'h:mm:ss.SSS a',
-                            second: 'h:mm:ss a',
-                            minute: 'h:mm a',
-                            hour: 'h a',
-                            day: 'MMM d',
-                            week: 'll',
-                            month: 'MMM yyyy',
-                            quarter: 'qqq - yyyy',
-                            year: 'yyyy'
-                        }
-                    },
-                    title: {
-                        display: true,
-                        text: 'Time'
                     }
                 },
                 y: {
@@ -110,31 +91,32 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
                         display: true,
                         text: yLabel
                     }
-                
+                }
             },
             plugins: {
                 legend: {
                     display: true
                 },
-                zoom: { // Ensure zoom options are here if you are using the zoom plugin
+                zoom: {
                     pan: {
                         enabled: false,
                         mode: 'x'
                     },
                     zoom: {
                         wheel: {
-                            enabled: false,
+                            enabled: false
                         },
                         pinch: {
                             enabled: false
                         },
-                        mode: 'x',
+                        mode: 'x'
                     }
                 }
             }
         }
     });
 }
+
 // --- Function to Fetch and Display Current Weather ---
 async function displayCurrentWeather() {
     if (typeof VISUAL_CROSSING_API_KEY === 'undefined' || VISUAL_CROSSING_API_KEY.includes("YOUR_")) {
