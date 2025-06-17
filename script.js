@@ -368,8 +368,9 @@ document.getElementById('freezer-stats').innerHTML = `H:<span class="temp-high">
 
 const garageMax = garageMinMax.max?.toFixed(0) ?? '--';
 const garageMin = garageMinMax.min?.toFixed(0) ?? '--';
-document.getElementById('garage-stats').innerHTML = `H:<span class="temp-high"><span class="math-inline">\{garageMax\}</span\>/L\:<span class\="temp\-low"\></span>{garageMin}</span>`;
-            //console.log("DEBUG: Fridge history:", fridgeHistory);
+document.getElementById('garage-stats').innerHTML = `H:<span class="temp-high"><span class="math-inline">\{garageMax\}</span\>/L\:<span class\="temp\-low"\></span>{garageMin}</span>`;       
+          
+          //console.log("DEBUG: Fridge history:", fridgeHistory);
             //console.log("DEBUG: Fridge min/max:", fridgeMinMax);
 
             // Update heater live display with last values in range
