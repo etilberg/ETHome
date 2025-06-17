@@ -40,19 +40,29 @@
     </section>
     <section id="temp-monitor-section">
         <h2>Fridge/Freezer Monitor (<span id="temp-monitor-status">Initializing...</span>)</h2>
-         <div class="live-values">
-            <div>Fridge: <span id="live-fridge">--</span> &deg;F</div>
-            <div>Freezer: <span id="live-freezer">--</span> &deg;F</div>
-            <div>Garage: <span id="live-garage">--</span> &deg;F</div>
-            <br>
-            <div id="fridge-stats">H: -- | L: --</div>
-            <div id="freezer-stats">H: -- | L: --</div>
-            <div id="garage-stats">H: -- | L: --</div>
-            <br>
-            <div>Heater Run Time: <span id="live-heater-value">--</span></div>
-            <div>Heater Status: <span id="live-heater-status">--</span></div>
+        <div class="live-values">
+            <div class="temp-card">
+                <div class="temp-card-label">Fridge</div>
+                <div class="temp-card-current"><span id="live-fridge">--</span>&deg;F</div>
+                <div class="temp-card-stats" id="fridge-stats">H: --&deg; / L: --&deg;</div>
+            </div>
+            <div class="temp-card">
+                <div class="temp-card-label">Freezer</div>
+                <div class="temp-card-current"><span id="live-freezer">--</span>&deg;F</div>
+                <div class="temp-card-stats" id="freezer-stats">H: --&deg; / L: --&deg;</div>
+            </div>
+            <div class="temp-card">
+                <div class="temp-card-label">Garage</div>
+                <div class="temp-card-current"><span id="live-garage">--</span>&deg;F</div>
+                <div class="temp-card-stats" id="garage-stats">H: --&deg; / L: --&deg;</div>
+            </div>
+            <div class="temp-card">
+                <div class="temp-card-label">Heater</div>
+                <div class="temp-card-current"><span id="live-heater-status">--</span></div>
+                <div class="temp-card-stats">Run Time: <span id="live-heater-value">--</span></div>
+            </div>
         </div>
-         <p><small>Last updated: <span id="temp-monitor-last-updated">Never</span></small></p>
+      
         <h3>History (Fridge/Freezer)</h3>
         <div class="chart-container">
             <canvas id="fridgeChart"></canvas>
@@ -63,7 +73,8 @@
         <div class="chart-container">
             <canvas id="garageChart"></canvas>
         </div>
-        <button id="reset-zoom">Reset Zoom</button>
+        <!button id="reset-zoom">Reset Zoom<!/button>
+        <p><small>Last updated: <span id="temp-monitor-last-updated">Never</span></small></p>
     </section>
 
     <section id="sump-monitor-section">
@@ -74,7 +85,7 @@
             <div>Last Run Time: <span id="sump-runtime">--</span> s</div>
             <div>Time Since Last Run: <span id="sump-since-run">--</span> min</div>
         </div>
-         <p><small>Last updated: <span id="sump-monitor-last-updated">Never</span></small></p>
+         
         </section>
     <section>
     <h2>Sump Pump</h2>
@@ -87,6 +98,7 @@
         <div class="chart-container"><canvas id="sumpRuntimeChart"></canvas></div>
         <div class="chart-container"><canvas id="sumpTempChart"></canvas></div>
         <div class="chart-container"><canvas id="sumpPowerChart"></canvas></div>
+    <p><small>Last updated: <span id="sump-monitor-last-updated">Never</span></small></p>
     </section>
     
     <script src="config.js"></script>
