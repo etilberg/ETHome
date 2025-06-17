@@ -228,8 +228,8 @@ document.addEventListener('DOMContentLoaded', () => {
     sumpRuntimeChartInstance = createChart('sumpRuntimeChart', 'Sump Runtime (sec)', 'rgb(255, 159, 64)', 'Runtime (seconds)');
     sumpSinceRunChartInstance = createChart('sumpSinceRunChart', 'Time Since Last Run (min)', 'rgb(201, 203, 207)', 'Minutes');
     //console.log("DEBUG: Charts initialization attempted.");
-// ======================= INITIALIZE THE RunsPerDay CHART =======================
-sumpRunsPerDayChartInstance = createChart('sumpRunsPerDayChart', 'Total Runs', 'rgb(129, 201, 149)', 'Number of Runs');
+    // ======================= INITIALIZE THE RunsPerDay CHART =======================
+    sumpRunsPerDayChartInstance = createChart('sumpRunsPerDayChart', 'Total Runs', 'rgb(129, 201, 149)', 'Number of Runs');
 if (sumpRunsPerDayChartInstance) {
     sumpRunsPerDayChartInstance.config.type = 'bar'; // Set chart type to bar
 
@@ -267,7 +267,7 @@ document.getElementById('history-range').addEventListener('change', function() {
     fetchSumpHistoricalData(selectedHours);      // New function
 });
 
-// --- Event Listener for Reset Zoom Button ---
+/*// --- Event Listener for Reset Zoom Button ---
 document.getElementById('reset-zoom').addEventListener('click', resetZoomOnAllCharts);
 
 function resetZoomOnAllCharts() {
@@ -280,6 +280,7 @@ function resetZoomOnAllCharts() {
     if (sumpRuntimeChartInstance) sumpRuntimeChartInstance.resetZoom();
     if (sumpSinceRunChartInstance) sumpSinceRunChartInstance.resetZoom();
 }
+*/
 // --- Fetch Historical Data for Temp Monitor ---
 function fetchTempMonitorHistoricalData(rangeHours = 1) {
     console.log(`DEBUG: Fetching Temp Monitor historical data for last ${rangeHours} hours.`);
@@ -300,7 +301,7 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
                 console.warn("DEBUG: Temp CSV has no data rows.");
                 return;
             
-            fridgeChartInstance.data.datasets[0].data = fridgeHistory;
+              fridgeChartInstance.data.datasets[0].data = fridgeHistory;
             }
 
             const now = new Date();
@@ -311,7 +312,6 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
             freezerHistory.length = 0;
             garageHistory.length = 0;
             heaterStatusHistory.length = 0;
-
 
             let lastHeaterRunTime = null;
             let lastHeaterStatus = null;
