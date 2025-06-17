@@ -40,36 +40,28 @@
     </section>
     <section id="temp-monitor-section">
         <h2>Fridge/Freezer Monitor (<span id="temp-monitor-status">Initializing...</span>)</h2>
-        <div class="live-values">
-            <div class="temp-card">
-                <div class="temp-card-label">Fridge</div>
-                <div class="temp-card-data-line">
-                    <span class="current-temp" id="live-fridge">--</span><sup>&deg;</sup>
-                    <span class="stats" id="fridge-stats">H:-- / L:--</span>
-                </div>
-            </div>
-            <div class="temp-card">
-                <div class="temp-card-label">Freezer</div>
-                <div class="temp-card-data-line">
-                    <span class="current-temp" id="live-freezer">--</span><sup>&deg;</sup>
-                    <span class="stats" id="freezer-stats">H:-- / L:--</span>
-                </div>
-            </div>
-            <div class="temp-card">
-                <div class="temp-card-label">Garage</div>
-                <div class="temp-card-data-line">
-                    <span class="current-temp" id="live-garage">--</span><sup>&deg;</sup>
-                    <span class="stats" id="garage-stats">H:-- / L:--</span>
-                </div>
-            </div>
-            <div class="temp-card">
-                <div class="temp-card-label">Heater</div>
-                <div class="temp-card-data-line">
-                    <span class="current-temp" id="live-heater-status">--</span>
-                    <span class="stats">Run: <span id="live-heater-value">--</span>s</span>
-                </div>
-            </div>
-        </div>
+       <div class="live-values">
+    <div class="temp-card">
+        <div class="temp-card-label">Fridge</div>
+        <div class="temp-card-current"><span id="live-fridge">--</span>&deg;F</div>
+        <div class="temp-card-stats" id="fridge-stats">H: --&deg; / L: --&deg;</div>
+    </div>
+    <div class="temp-card">
+        <div class="temp-card-label">Freezer</div>
+        <div class="temp-card-current"><span id="live-freezer">--</span>&deg;F</div>
+        <div class="temp-card-stats" id="freezer-stats">H: --&deg; / L: --&deg;</div>
+    </div>
+    <div class="temp-card">
+        <div class="temp-card-label">Garage</div>
+        <div class="temp-card-current"><span id="live-garage">--</span>&deg;F</div>
+        <div class="temp-card-stats" id="garage-stats">H: --&deg; / L: --&deg;</div>
+    </div>
+    <div class.temp-card">
+        <div class="temp-card-label">Heater</div>
+        <div class="temp-card-current" id="live-heater-status">--</div>
+        <div class="temp-card-stats">Run Time: <span id="live-heater-value">--</span>s</div>
+    </div>
+</div>
       
         <h3>History (Fridge/Freezer)</h3>
         <div class="chart-container">
