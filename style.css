@@ -157,34 +157,43 @@ small {
 .chart-container-large {
     height: 35vh;
 }
-/* --- Styles for new Temperature Display Cards --- */
+/* --- Styles for new Temperature Display Cards (Compressed) --- */
 .temp-card {
     display: flex;
     flex-direction: column;
     align-items: center;
     background-color: #2c2c2c;
     border-radius: 8px;
-    padding: 10px 15px;
+    padding: 10px;
     margin: 5px;
     border: 1px solid #333;
-    min-width: 120px; /* Ensures cards have a consistent width */
+    min-width: 140px; /* Ensures cards have a consistent width */
 }
-
 .temp-card-label {
     font-weight: bold;
-    color: #90caf9; /* Use existing theme color */
-    font-size: 1.1em;
+    color: #90caf9;
+    font-size: 1em; /* Slightly smaller to save space */
     margin-bottom: 5px;
 }
-
-.temp-card-current {
-    font-size: 2.5em; /* Large font for current temp */
+.temp-card-data-line {
+    display: flex;
+    align-items: baseline; /* Aligns the bottom of the text */
+    white-space: nowrap; /* Prevents wrapping */
+}
+.temp-card-data-line .current-temp {
+    font-size: 2.2em; /* Large font for current temp */
     font-weight: bold;
     color: #e0e0e0;
-    line-height: 1.1;
+    line-height: 1;
 }
-
-.temp-card-stats {
-    font-size: 0.9em;
-    color: #b0bec5; /* Use existing theme color */
+/* Add the degree symbol style */
+.temp-card-data-line .current-temp + sup {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #e0e0e0;
+    margin-right: 8px; /* Space between current temp and stats */
+}
+.temp-card-data-line .stats {
+    font-size: 0.8em;
+    color: #b0bec5;
 }
