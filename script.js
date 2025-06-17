@@ -361,8 +361,7 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
               `H: <span class="temp-high">${fridgeMinMax.max?.toFixed(1) ?? '--'}</span> ` + `L: <span class="temp-low">${fridgeMinMax.min?.toFixed(1) ?? '--'}</span>`;
             
              document.getElementById('freezer-stats').innerHTML =
-              `H: <span class="temp-high">${freezerMinMax.max?.toFixed(1) ?? '--'}</span> ` +
-              `L: <span class="temp-low">${freezerMinMax.min?.toFixed(1) ?? '--'}</span>`;
+              `H: <span class="temp-high">${freezerMinMax.max?.toFixed(1) ?? '--'} L: class="temp-low">${freezerMinMax.min?.toFixed(1) ?? '--'}</span>`;
             
             document.getElementById('garage-stats').innerHTML =
               `H: <span class="temp-high">${garageMinMax.max?.toFixed(1) ?? '--'}</span> ` +
