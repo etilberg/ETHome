@@ -300,8 +300,6 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
             if (lines.length <= 1) {
                 console.warn("DEBUG: Temp CSV has no data rows.");
                 return;
-            
-              fridgeChartInstance.data.datasets[0].data = fridgeHistory;
             }
 
             const now = new Date();
@@ -312,6 +310,7 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
             freezerHistory.length = 0;
             garageHistory.length = 0;
             heaterStatusHistory.length = 0;
+
 
             let lastHeaterRunTime = null;
             let lastHeaterStatus = null;
@@ -331,15 +330,17 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
                 freezerHistory.push(parseFloat(cols[2]));  // FreezerTemp
                 fridgeHistory.push(parseFloat(cols[3]));   // FridgeTemp
                 lastHeaterRunTime = parseFloat(cols[4]);
-                heaterStatusHistory.push(parseInt(cols[5].trim().replace('\r', ''))); // HeaterStatus (0 or 1)lastHeaterStatus = parseInt(cols[5]);
+                const heaterStatus = parseInt(cols[5].trim().replace('\r', ''));
+                heaterStatusHistory.push(heaterStatus);
+                lastHeaterStatus = heaterStatus;
             });
 
             console.log(`DEBUG: Loaded ${timeHistory.length} points of fridge/freezer/garage history.`);
 
             if (fridgeChartInstance) {
                 fridgeChartInstance.data.labels = timeHistory;
-                fridgeChartInstance.data.datasets[0].data = fridgeHistory;        //fridge temperature
-                fridgeChartInstance.data.datasets[1].data = heaterStatusHistory;    // Heater On/Off
+                fridgeChartInstance.data.datasets[0].data = fridgeHistory;
+                fridgeChartInstance.data.datasets[1].data = heaterStatusHistory;
                 fridgeChartInstance.update();
             }
             if (freezerChartInstance) {
@@ -357,21 +358,21 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
             const fridgeMinMax = calculateMinMax(fridgeHistory);
             const freezerMinMax = calculateMinMax(freezerHistory);
             const garageMinMax = calculateMinMax(garageHistory);
-// --- NEW super-compressed format for High/Low stats ---
-const fridgeMax = fridgeMinMax.max?.toFixed(0) ?? '--';
-const fridgeMin = fridgeMinMax.min?.toFixed(0) ?? '--';
-document.getElementById('fridge-stats').innerHTML = `H:<span class="temp-high"><span class="math-inline">\{fridgeMax\}</span\>/L\:<span class\="temp\-low"\></span>{fridgeMin}</span>`;
 
-const freezerMax = freezerMinMax.max?.toFixed(0) ?? '--';
-const freezerMin = freezerMinMax.min?.toFixed(0) ?? '--';
-document.getElementById('freezer-stats').innerHTML = `H:<span class="temp-high"><span class="math-inline">\{freezerMax\}</span\>/L\:<span class\="temp\-low"\></span>{freezerMin}</span>`;
+            // --- Sanity Check Log ---
+            console.log(`DEBUG: Values to display - Fridge Max: ${fridgeMinMax.max}, Freezer Max: ${freezerMinMax.max}`);
 
-const garageMax = garageMinMax.max?.toFixed(0) ?? '--';
-const garageMin = garageMinMax.min?.toFixed(0) ?? '--';
-document.getElementById('garage-stats').innerHTML = `H:<span class="temp-high"><span class="math-inline">\{garageMax\}</span\>/L\:<span class\="temp\-low"\></span>{garageMin}</span>`;       
-          
-          //console.log("DEBUG: Fridge history:", fridgeHistory);
-            //console.log("DEBUG: Fridge min/max:", fridgeMinMax);
+            const fridgeMax = fridgeMinMax.max?.toFixed(0) ?? '--';
+            const fridgeMin = fridgeMinMax.min?.toFixed(0) ?? '--';
+            document.getElementById('fridge-stats').innerHTML = `H:<span class="temp-high">${fridgeMax}</span>/L:<span class="temp-low">${fridgeMin}</span>`;
+
+            const freezerMax = freezerMinMax.max?.toFixed(0) ?? '--';
+            const freezerMin = freezerMinMax.min?.toFixed(0) ?? '--';
+            document.getElementById('freezer-stats').innerHTML = `H:<span class="temp-high">${freezerMax}</span>/L:<span class="temp-low">${freezerMin}</span>`;
+
+            const garageMax = garageMinMax.max?.toFixed(0) ?? '--';
+            const garageMin = garageMinMax.min?.toFixed(0) ?? '--';
+            document.getElementById('garage-stats').innerHTML = `H:<span class="temp-high">${garageMax}</span>/L:<span class="temp-low">${garageMin}</span>`;
 
             // Update heater live display with last values in range
             if (lastHeaterRunTime !== null && liveHeaterValueElement) {
@@ -380,15 +381,15 @@ document.getElementById('garage-stats').innerHTML = `H:<span class="temp-high"><
             if (lastHeaterStatus !== null && liveHeaterStatusElement) {
                 liveHeaterStatusElement.textContent = lastHeaterStatus === 1 ? "On" : "Off";
             }
+            
             if (timeHistory.length > 0) {
                 fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours);
             }
         })
         .catch(err => {
             console.error("DEBUG: Failed to fetch historical temp data:", err);
-    });
+        });
 }
-
 // --- Fetch Historical Data for Sump Pump ---
 function fetchSumpHistoricalData(rangeHours) {
     console.log(`DEBUG: Fetching Sump Pump historical data for last ${rangeHours} hours.`);
