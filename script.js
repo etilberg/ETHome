@@ -357,19 +357,18 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
             const fridgeMinMax = calculateMinMax(fridgeHistory);
             const freezerMinMax = calculateMinMax(freezerHistory);
             const garageMinMax = calculateMinMax(garageHistory);
-            // --- NEW compressed format for High/Low stats ---
-            const fridgeMax = fridgeMinMax.max?.toFixed(0) ?? '--';
-            const fridgeMin = fridgeMinMax.min?.toFixed(0) ?? '--';
-            document.getElementById('fridge-stats').innerHTML = `H: <span class="temp-high"><span class="math-inline">\{fridgeMax\}</span\>° / L\: <span class\="temp\-low"\></span>{fridgeMin}</span>°`;
-            
-            const freezerMax = freezerMinMax.max?.toFixed(0) ?? '--';
-            const freezerMin = freezerMinMax.min?.toFixed(0) ?? '--';
-            document.getElementById('freezer-stats').innerHTML = `H: <span class="temp-high"><span class="math-inline">\{freezerMax\}</span\>° / L\: <span class\="temp\-low"\></span>{freezerMin}</span>°`;
-            
-            const garageMax = garageMinMax.max?.toFixed(0) ?? '--';
-            const garageMin = garageMinMax.min?.toFixed(0) ?? '--';
-            document.getElementById('garage-stats').innerHTML = `H: <span class="temp-high"><span class="math-inline">\{garageMax\}</span\>° / L\: <span class\="temp\-low"\></span>{garageMin}</span>°`;
+// --- NEW super-compressed format for High/Low stats ---
+const fridgeMax = fridgeMinMax.max?.toFixed(0) ?? '--';
+const fridgeMin = fridgeMinMax.min?.toFixed(0) ?? '--';
+document.getElementById('fridge-stats').innerHTML = `H:<span class="temp-high"><span class="math-inline">\{fridgeMax\}</span\>/L\:<span class\="temp\-low"\></span>{fridgeMin}</span>`;
 
+const freezerMax = freezerMinMax.max?.toFixed(0) ?? '--';
+const freezerMin = freezerMinMax.min?.toFixed(0) ?? '--';
+document.getElementById('freezer-stats').innerHTML = `H:<span class="temp-high"><span class="math-inline">\{freezerMax\}</span\>/L\:<span class\="temp\-low"\></span>{freezerMin}</span>`;
+
+const garageMax = garageMinMax.max?.toFixed(0) ?? '--';
+const garageMin = garageMinMax.min?.toFixed(0) ?? '--';
+document.getElementById('garage-stats').innerHTML = `H:<span class="temp-high"><span class="math-inline">\{garageMax\}</span\>/L\:<span class\="temp\-low"\></span>{garageMin}</span>`;
             //console.log("DEBUG: Fridge history:", fridgeHistory);
             //console.log("DEBUG: Fridge min/max:", fridgeMinMax);
 
