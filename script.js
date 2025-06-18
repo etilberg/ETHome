@@ -354,14 +354,8 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
                 garageChartInstance.update();
             }
           
-            //  ---MIN/MAX ---
-            const fridgeMinMax = calculateMinMax(fridgeHistory);
-            const freezerMinMax = calculateMinMax(freezerHistory);
-            const garageMinMax = calculateMinMax(garageHistory);
-
-            // --- Sanity Check Log ---
+             // --- Sanity Check Log ---
             console.log(`DEBUG: Values to display - Fridge Max: ${fridgeMinMax.max}, Freezer Max: ${freezerMinMax.max}`);
-
           
 document.getElementById('fridge-stats').innerHTML =
   `H: <span class="temp-high">${fridgeMinMax.max?.toFixed(1) ?? '--'}°</span> / ` +
