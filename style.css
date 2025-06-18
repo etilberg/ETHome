@@ -165,16 +165,16 @@ small {
     align-items: center;
     background-color: #2c2c2c;
     border-radius: 8px;
-    padding: 1px 1px;
-    margin: 1px;
-    border: 1px solid #333;
+    padding: 0px 0px;
+    margin: 0px;
+    border: 0px solid #333;
     min-width: 100px; 
 }
 .temp-card-label {
     font-weight: bold;
     color: #90caf9; 
     font-size: 1em;
-    margin-bottom: 1px;
+    margin-bottom: 0px;
 }
 .temp-card-current {
     font-size: 1.2em; 
