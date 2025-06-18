@@ -354,18 +354,17 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
                 garageChartInstance.update();
             }
           
-             // --- Sanity Check Log ---
-            console.log(`DEBUG: Values to display - Fridge Max: ${fridgeMinMax.max}, Freezer Max: ${freezerMinMax.max}`);
-          
-document.getElementById('fridge-stats').innerHTML =
-  `H: <span class="temp-high">${fridgeMinMax.max?.toFixed(1) ?? '--'}°</span> / ` +
-  `L: <span class="temp-low">${fridgeMinMax.min?.toFixed(1) ?? '--'}°</span>`;
-
-
-//  ---MIN/MAX ---
+          //  ---MIN/MAX ---
 const fridgeMinMax = calculateMinMax(fridgeHistory);
 const freezerMinMax = calculateMinMax(freezerHistory);
 const garageMinMax = calculateMinMax(garageHistory);
+
+// --- Sanity Check Log ---
+console.log(`DEBUG: Values to display - Fridge Max: ${fridgeMinMax.max}, Freezer Max: ${freezerMinMax.max}`);
+
+document.getElementById('fridge-stats').innerHTML =
+  `H: <span class="temp-high">${fridgeMinMax.max?.toFixed(1) ?? '--'}°</span> / ` +
+  `L: <span class="temp-low">${fridgeMinMax.min?.toFixed(1) ?? '--'}°</span>`;
 
 // --- NEW, FOOLPROOF FORMAT using classic string concatenation ---
 const fridgeMax = fridgeMinMax.max?.toFixed(0) ?? '--';
@@ -379,9 +378,10 @@ document.getElementById('freezer-stats').innerHTML = 'H: <span class="temp-high"
 const garageMax = garageMinMax.max?.toFixed(0) ?? '--';
 const garageMin = garageMinMax.min?.toFixed(0) ?? '--';
 document.getElementById('garage-stats').innerHTML = 'H: <span class="temp-high">' + garageMax + '</span>&deg; / L: <span class="temp-low">' + garageMin + '</span>&deg;';
+
 document.getElementById('garage-stats').innerHTML =
-  `H: <span class="temp-high">${garageMinMax.max?.toFixed(1) ?? '--'}°</span> / ` +
-  `L: <span class="temp-low">${garageMinMax.min?.toFixed(1) ?? '--'}°</span>`;
+`H: <span class="temp-high">${garageMinMax.max?.toFixed(1) ?? '--'}°</span> / ` +
+`L: <span class="temp-low">${garageMinMax.min?.toFixed(1) ?? '--'}°</span>`;
 
           
           // Update heater live display with last values in range
