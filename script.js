@@ -368,18 +368,23 @@ document.getElementById('fridge-stats').innerHTML =
   `L: <span class="temp-low">${fridgeMinMax.min?.toFixed(1) ?? '--'}°</span>`;
 
 
+//  ---MIN/MAX ---
+const fridgeMinMax = calculateMinMax(fridgeHistory);
+const freezerMinMax = calculateMinMax(freezerHistory);
+const garageMinMax = calculateMinMax(garageHistory);
+
+// --- NEW, FOOLPROOF FORMAT using classic string concatenation ---
 const fridgeMax = fridgeMinMax.max?.toFixed(0) ?? '--';
 const fridgeMin = fridgeMinMax.min?.toFixed(0) ?? '--';
-document.getElementById('fridge-stats').innerHTML = `H: <span class="temp-high"><span class="math-inline">\{fridgeMax\}</span\>&deg; / L\: <span class\="temp\-low"\></span>{fridgeMin}</span>&deg;`;
+document.getElementById('fridge-stats').innerHTML = 'H: <span class="temp-high">' + fridgeMax + '</span>&deg; / L: <span class="temp-low">' + fridgeMin + '</span>&deg;';
 
 const freezerMax = freezerMinMax.max?.toFixed(0) ?? '--';
 const freezerMin = freezerMinMax.min?.toFixed(0) ?? '--';
-document.getElementById('freezer-stats').innerHTML = `H: <span class="temp-high"><span class="math-inline">\{freezerMax\}</span\>&deg; / L\: <span class\="temp\-low"\></span>{freezerMin}</span>&deg;`;
+document.getElementById('freezer-stats').innerHTML = 'H: <span class="temp-high">' + freezerMax + '</span>&deg; / L: <span class="temp-low">' + freezerMin + '</span>&deg;';
 
 const garageMax = garageMinMax.max?.toFixed(0) ?? '--';
 const garageMin = garageMinMax.min?.toFixed(0) ?? '--';
-document.getElementById('garage-stats').innerHTML = `H: <span class="temp-high"><span class="math-inline">\{garageMax\}</span\>&deg; / L\: <span class\="temp\-low"\></span>{garageMin}</span>&deg;`;
-
+document.getElementById('garage-stats').innerHTML = 'H: <span class="temp-high">' + garageMax + '</span>&deg; / L: <span class="temp-low">' + garageMin + '</span>&deg;';
 document.getElementById('garage-stats').innerHTML =
   `H: <span class="temp-high">${garageMinMax.max?.toFixed(1) ?? '--'}°</span> / ` +
   `L: <span class="temp-low">${garageMinMax.min?.toFixed(1) ?? '--'}°</span>`;
