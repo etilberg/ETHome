@@ -171,14 +171,12 @@ small {
     min-width: 100px; 
 }
 .temp-card-label {
-    font-weight: bold;
     color: #90caf9; 
     font-size: 1em;
     margin-bottom: 0px;
 }
 .temp-card-current {
-    font-size: 1.2em; 
-    font-weight: bold;
+    font-size: 1.3em; 
     color: #e0e0e0;
     line-height: 1;
 }
