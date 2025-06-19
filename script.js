@@ -222,13 +222,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update the chart to show the newly added data
         garageChartInstance.update();
     }
-    sumpTempChartInstance = createChart('sumpTempChart', 'Sump Temperature (°F)', 'rgb(255, 206, 86)');
+    sumpTempChartInstance = createChart('sumpTempChart', 'Basement Temperature (°F)', 'rgb(255, 206, 86)');
     sumpPowerChartInstance = createChart('sumpPowerChart', 'External Power (V)', 'rgb(153, 102, 255)', 'Voltage (V)');
     sumpRuntimeChartInstance = createChart('sumpRuntimeChart', 'Sump Runtime (sec)', 'rgb(255, 159, 64)', 'Runtime (seconds)');
-    sumpSinceRunChartInstance = createChart('sumpSinceRunChart', 'Time Since Last Run (min)', 'rgb(201, 203, 207)', 'Minutes');
+    sumpSinceRunChartInstance = createChart('sumpSinceRunChart', 'Time Since Last Cycle (min)', 'rgb(201, 203, 207)', 'Minutes');
     //console.log("DEBUG: Charts initialization attempted.");
     // ======================= INITIALIZE THE RunsPerDay CHART =======================
-    sumpRunsPerDayChartInstance = createChart('sumpRunsPerDayChart', 'Total Runs', 'rgb(129, 201, 149)', 'Number of Runs');
+    sumpRunsPerDayChartInstance = createChart('sumpRunsPerDayChart', 'Total Cycles', 'rgb(129, 201, 149)', 'Number of Runs');
 if (sumpRunsPerDayChartInstance) {
     sumpRunsPerDayChartInstance.config.type = 'bar'; // Set chart type to bar
 
