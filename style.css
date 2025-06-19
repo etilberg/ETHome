@@ -61,9 +61,10 @@ section {
 #fridge-stats,
 #freezer-stats,
 #garage-stats {
+  display: flex;
   font-size: 0.9em;
-  color: #444;
-  margin-bottom: 8px;
+  /*color: #444;*/
+  margin-bottom: 1px;
 }
 .temp-high {
   color: red !important;
@@ -185,9 +186,4 @@ small {
     white-space: nowrap;
     font-size: 0.6em;
     color: #b0bec5; 
-}
-#fridge-stats {
-  display: flex;
-  align-items: center;
-  white-space: nowrap;
 }
