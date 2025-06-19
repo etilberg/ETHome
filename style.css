@@ -144,7 +144,6 @@ small {
 }
 #current-temp {
     font-size: 3em;
-    font-weight: bold;
     color: #e0e0e0; /* Match main text color */
     margin-right: 20px;
 }
