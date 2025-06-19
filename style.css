@@ -163,7 +163,6 @@ small {
     display: flex;
     flex-direction: column; /* This stacks the items vertically */
     align-items: center;
-    white-space: nowrap;
     background-color: #2c2c2c;
     border-radius: 8px;
     padding: 0px 0px;
@@ -182,6 +181,7 @@ small {
     line-height: 1;
 }
 .temp-card-stats {
+    white-space: nowrap;
     font-size: 0.6em;
     color: #b0bec5; 
 }
