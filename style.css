@@ -185,3 +185,8 @@ small {
     font-size: 0.6em;
     color: #b0bec5; 
 }
+#fridge-stats {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
