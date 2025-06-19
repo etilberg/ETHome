@@ -366,10 +366,10 @@ document.getElementById('fridge-stats').innerHTML =
   `H: <span class="temp-high">${fridgeMinMax.max?.toFixed(1) ?? '--'}°</span> / ` +
   `L: <span class="temp-low">${fridgeMinMax.min?.toFixed(1) ?? '--'}°</span>`;
 
-// --- NEW, FOOLPROOF FORMAT using classic string concatenation ---
+// --- NEW, FOOL FORMAT using classic string concatenation ---
 const fridgeMax = fridgeMinMax.max?.toFixed(0) ?? '--';
 const fridgeMin = fridgeMinMax.min?.toFixed(0) ?? '--';
-document.getElementById('fridge-stats').innerHTML = 'H: class="temp-high">' + fridgeMax + '&deg / L: class="temp-low">' + fridgeMin + '&deg;';
+document.getElementById('fridge-stats').innerHTML = 'H: 'class="temp-high">' + fridgeMax + '&deg '/ L: 'class="temp-low">' + fridgeMin + '&deg;';
 
 const freezerMax = freezerMinMax.max?.toFixed(0) ?? '--';
 const freezerMin = freezerMinMax.min?.toFixed(0) ?? '--';
