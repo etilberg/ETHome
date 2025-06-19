@@ -47,13 +47,12 @@ section {
     border-bottom: 1px solid #333;
 }
 .live-values div {
-    margin: 5px 10px;
+    margin: 1px 1px;
     text-align: center;
 }
 .live-values span {
-    font-weight: bold;
-    color: #ff7043;
-    display: block;
+    color: #25c425;
+
     font-size: 1.1em;
 }
 
@@ -184,6 +183,6 @@ small {
 }
 .temp-card-stats {
     white-space: nowrap;
-    font-size: 0.6em;
+    font-size: 0.8em;
     color: #b0bec5; 
 }
