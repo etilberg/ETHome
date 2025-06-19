@@ -776,7 +776,7 @@ function processSumpAnalytics(sumpData) {
         // Update the chart title with the calculated average
         sumpRunsPerDayChartInstance.options.plugins.title = {
             display: true,
-            text: `Daily Sump Runs (Avg: ${avgRunsPerDay} per day)`
+            text: `Daily Sump Pump Cycle Count (Last 90 Days) Avg: ${avgRunsPerDay} per day`
         };
         sumpRunsPerDayChartInstance.update();
     }
