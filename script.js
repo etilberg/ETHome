@@ -145,7 +145,6 @@ async function displayCurrentWeather() {
 
         document.getElementById('current-temp').textContent = `${currentTemp}°F`;
         document.getElementById('current-condition').textContent = conditions;
-        //document.getElementById('high-low').innerHTML = `H: <span class="temp-high"><span class="math-inline">\{dailyHigh\}</span\>° / L\: <span class\="temp\-low"\></span>{dailyLow}</span>°`;
         document.getElementById('high-low').innerHTML = `H: <span class="temp-high">${dailyHigh}°</span> / L: <span class="temp-low">${dailyLow}°</span>`;
 
         document.getElementById('wind-speed').textContent = `Wind: ${windSpeed} mph`;
@@ -363,19 +362,21 @@ const garageMinMax = calculateMinMax(garageHistory);
 console.log(`DEBUG: Values to display - Fridge Max: ${fridgeMinMax.max}, Freezer Max: ${freezerMinMax.max}`);
 
 // --- NEW, FOOLish FORMAT using classic string concatenation ---
+          
+  document.getElementById('high-low').innerHTML = `H: <span class="temp-high">${dailyHigh}°</span> / L: <span class="temp-low">${dailyLow}°</span>`;
+
+          
 const fridgeMax = fridgeMinMax.max?.toFixed(0) ?? '--';
 const fridgeMin = fridgeMinMax.min?.toFixed(0) ?? '--';
-document.getElementById('fridge-stats').innerHTML = `H: <span class="temp-high">${fridgeMinMax.max?.toFixed(1) ?? '--'}°</span> / ` + `L: <span class="temp-low">${fridgeMinMax.min?.toFixed(1) ?? '--'}°</span>`;
-
-//document.getElementById('fridge-stats').innerHTML = 'H: '<span class="temp-high">' + fridgeMax + '&deg '/ L: 'class="temp-low">' + fridgeMin + '&deg;</span>;
+document.getElementById('fridge-stats').innerHTML = `H: <span class="temp-high">${fridgeMinMax.max?.toFixed(1) ?? '--'}°</span> / L: <span class="temp-low">${fridgeMinMax.min?.toFixed(1) ?? '--'}°</span>`;
 
 const freezerMax = freezerMinMax.max?.toFixed(0) ?? '--';
 const freezerMin = freezerMinMax.min?.toFixed(0) ?? '--';
-document.getElementById('freezer-stats').innerHTML = 'H: <span class="temp-high">' + freezerMax + '</span>'&deg; ' / L: <span class="temp-low">' + freezerMin + '</span>'&deg;; 
+document.getElementById('freezer-stats').innerHTML = 'H: <span class="temp-high">' + freezerMax + '</span>'° ' / L: <span class="temp-low">' + freezerMin + '</span>'°;; 
 
 const garageMax = garageMinMax.max?.toFixed(0) ?? '--';
 const garageMin = garageMinMax.min?.toFixed(0) ?? '--';
-document.getElementById('garage-stats').innerHTML = 'H: <span class="temp-high">' + garageMax + '</span>&deg; / L: <span class="temp-low">' + garageMin + '</span>&deg;';
+document.getElementById('garage-stats').innerHTML = 'H: <span class="temp-high">' + garageMax + '</span>°; / L: <span class="temp-low">' + garageMin + '</span>°;';
 
 document.getElementById('garage-stats').innerHTML =
 `H: <span class="temp-high">${garageMinMax.max?.toFixed(1) ?? '--'}°</span> / ` +
@@ -746,7 +747,7 @@ function applyOutdoorTemps(hourlyTemps) {
   console.log(`DEBUG: Mapped ${outdoorTemps.filter(v => v !== null).length} outdoor temps to ${timeHistory.length} garage timestamps.`);
 }
 
-// ======================= NEW SUMP PUMP ANALYTICS FUNCTIONS =======================
+// ======================= SUMP PUMP ANALYTICS FUNCTIONS =======================
 
 /**
  * Processes raw sump data to calculate runs per day and updates the bar chart.
