@@ -72,7 +72,17 @@ section {
   color: cyan !important;
 }
 
+.history-container {
+    display: flex; /* Makes the container a flex container */
+    justify-content: space-between; /* Pushes items to opposite ends */
+    align-items: center; /* Vertically centers items */
+    width: 100%; /* Ensures it takes full width to allow space-between to work */
+}
 
+  /* Optional: Basic styling for the h3 to ensure it doesn't have default margins that might interfere */
+  .history-container h3 {
+    margin: 0;
+  }
 /* Status indicators within H2 */
 h2 span {
     font-style: italic;
