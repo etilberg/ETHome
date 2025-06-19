@@ -26,18 +26,7 @@
         <p>--</p>
     </div>
     </div>
-    <section id="historical-data-section">
-        <label for="history-range">Select History Range:</label>
-            <select id="history-range">
-                <option value="1">Last 1 Hour</option>
-                <option value="2">Last 2 Hours</option>
-                <option value="4" selected>Last 4 Hours</option>
-                <option value="12">Last 12 Hours</option>
-                <option value="24">Last 24 Hours</option>                
-                <option value="48">Last 48 Hours</option>
-                <option value="168">Last 1 Week</option>
-            </select>
-    </section>
+
     <section id="temp-monitor-section">
         <h2>Fridge/Freezer Monitor (<span id="temp-monitor-status">Initializing...</span>)</h2>
         <div class="live-values">
@@ -64,6 +53,16 @@
         </div>
       
         <h3>Fridge/Freezer History</h3>
+            <label for="history-range">Select History Range:</label>
+            <select id="history-range">
+                <option value="1">Last 1 Hour</option>
+                <option value="2">Last 2 Hours</option>
+                <option value="4" selected>Last 4 Hours</option>
+                <option value="12">Last 12 Hours</option>
+                <option value="24">Last 24 Hours</option>                
+                <option value="48">Last 48 Hours</option>
+                <option value="168">Last 1 Week</option>
+            </select>
         <div class="chart-container">
             <canvas id="fridgeChart"></canvas>
         </div>
