@@ -368,15 +368,15 @@ console.log(`DEBUG: Values to display - Fridge Max: ${fridgeMinMax.max}, Freezer
           
 const fridgeMax = fridgeMinMax.max?.toFixed(0) ?? '--';
 const fridgeMin = fridgeMinMax.min?.toFixed(0) ?? '--';
-document.getElementById('fridge-stats').innerHTML = `H: <span class="temp-high">' + ${fridgeMinMax.max?.toFixed(1) ?? '--'}°</span> / L: <span class="temp-low">${fridgeMinMax.min?.toFixed(1) ?? '--'}°</span>`;
+document.getElementById('fridge-stats').innerHTML = `H: <span class="temp-high">` ${fridgeMinMax.max?.toFixed(1) ?? '--'}°</span> / L: <span class="temp-low">${fridgeMinMax.min?.toFixed(1) ?? '--'}°</span>`;
 
 const freezerMax = freezerMinMax.max?.toFixed(0) ?? '--';
 const freezerMin = freezerMinMax.min?.toFixed(0) ?? '--';
-document.getElementById('freezer-stats').innerHTML = 'H: <span class="temp-high">' + freezerMax + '°</span> / L: <span class="temp-low">' + freezerMin + '°</span>'; 
+document.getElementById('freezer-stats').innerHTML = `H: <span class="temp-high">' + freezerMax + '°</span> / L: <span class="temp-low">' + freezerMin + '°</span>`; 
 
 const garageMax = garageMinMax.max?.toFixed(0) ?? '--';
 const garageMin = garageMinMax.min?.toFixed(0) ?? '--';
-document.getElementById('garage-stats').innerHTML = 'H: <span class="temp-high">' + garageMax + '°</span> / L: <span class="temp-low">' + garageMin + '°</span>';
+document.getElementById('garage-stats').innerHTML = `H: <span class="temp-high">` + garageMax + `°</span> / L: <span class="temp-low">` + garageMin + `°</span>`;
 
 document.getElementById('garage-stats').innerHTML =
 `H: <span class="temp-high">${garageMinMax.max?.toFixed(1) ?? '--'}°</span> / ` +
