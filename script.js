@@ -372,7 +372,7 @@ document.getElementById('fridge-stats').innerHTML = `H: <span class="temp-high">
 
 const freezerMax = freezerMinMax.max?.toFixed(0) ?? '--';
 const freezerMin = freezerMinMax.min?.toFixed(0) ?? '--';
-document.getElementById('freezer-stats').innerHTML = `H: <span class="temp-high">' + freezerMax + '°</span> / L: <span class="temp-low">' + freezerMin + '°</span>`; 
+document.getElementById('freezer-stats').innerHTML = `H: <span class="temp-high">` + freezerMax °</span> / L: <span class="temp-low">` + freezerMin + `°</span>`; 
 
 const garageMax = garageMinMax.max?.toFixed(0) ?? '--';
 const garageMin = garageMinMax.min?.toFixed(0) ?? '--';
