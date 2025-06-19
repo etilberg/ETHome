@@ -353,7 +353,7 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
                 garageChartInstance.update();
             }
           
-          //  ---MIN/MAX ---
+          //  ---fill MIN/MAX array---
 const fridgeMinMax = calculateMinMax(fridgeHistory);
 const freezerMinMax = calculateMinMax(freezerHistory);
 const garageMinMax = calculateMinMax(garageHistory);
@@ -375,7 +375,7 @@ const freezerMax = freezerMinMax.max?.toFixed(0) ?? '--';
 const freezerMin = freezerMinMax.min?.toFixed(0) ?? '--';
 document.getElementById('freezer-stats').innerHTML = `H: <span class="temp-high">` + freezerMax °</span> / L: <span class="temp-low">` + freezerMin + `°</span>`; 
 */
-document.getElementById('fridge-stats').innerHTML = `H: <span class="temp-high">${freezerMinMax.max}°</span> / L: <span class="temp-low">${freezerMinMax.min}°</span>`;
+document.getElementById('freezer-stats').innerHTML = `H: <span class="temp-high">${freezerMinMax.max}°</span> / L: <span class="temp-low">${freezerMinMax.min}°</span>`;
 /*
 const garageMax = garageMinMax.max?.toFixed(0) ?? '--';
 const garageMin = garageMinMax.min?.toFixed(0) ?? '--';
