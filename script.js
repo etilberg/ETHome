@@ -146,21 +146,23 @@ async function displayCurrentWeather() {
         const conditions = current.conditions;
         const synopsis = todayForecast.description;
 
-        // ✅ Update the DOM
         document.getElementById('current-temp').textContent = `${currentTemp}°F`;
         document.getElementById('current-condition').textContent = conditions;
         document.getElementById('high-low').innerHTML = `H: <span class="temp-high">${dailyHigh}°</span> / L: <span class="temp-low">${dailyLow}°</span>`;
         document.getElementById('wind-speed').textContent = `Wind: ${windSpeed} mph`;
         document.getElementById('forecast-synopsis').querySelector('p').textContent = synopsis;
 
-        // ✅ New fields
-        document.getElementById("humidity").textContent = `Humidity: ${Math.round(current.humidity)}%`;
-        document.getElementById("feels-like").textContent = `Feels like: ${Math.round(current.feelslike)}°`;
-        document.getElementById("tomorrow-forecast").textContent = `Tomorrow: H: ${Math.round(tomorrowForecast.tempmax)}° / L: ${Math.round(tomorrowForecast.tempmin)}°`;
+        // New fields
+        document.getElementById('humidity').textContent = `Humidity: ${Math.round(current.humidity)}%`;
+        document.getElementById('feels-like').textContent = `Feels like: ${Math.round(current.feelslike)}°`;
+        document.getElementById('tomorrow-forecast').textContent = `Tomorrow: H: ${Math.round(tomorrowForecast.tempmax)}° / L: ${Math.round(tomorrowForecast.tempmin)}°`;
 
     } catch (error) {
         console.error("Could not fetch current weather:", error);
-        document.getElementById('weather-location')?.textContent = "Weather data unavailable.";
+        const locationEl = document.getElementById('weather-location');
+        if (locationEl) {
+            locationEl.textContent = "Weather data unavailable.";
+        }
     }
 }
 
