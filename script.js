@@ -321,7 +321,7 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
             garageHistory.length = 0;
             heaterStatusHistory.length = 0;
 
-
+            let totalHeaterRunTime = 0;
             let lastHeaterRunTime = null;
             let lastHeaterStatus = null;
 
