@@ -125,40 +125,45 @@ async function displayCurrentWeather() {
     }
 
     const location = 'Watertown,SD';
-    const apiUrl = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/${location}/today?unitGroup=us&include=current&key=${VISUAL_CROSSING_API_KEY}&contentType=json`;
+    const apiUrl = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/${location}?unitGroup=us&include=current&key=${VISUAL_CROSSING_API_KEY}&contentType=json`;
+
     try {
         const response = await fetch(apiUrl);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
+
         const data = await response.json();
 
-        const currentConditions = data.currentConditions;
+        const current = data.currentConditions;
         const todayForecast = data.days[0];
+        const tomorrowForecast = data.days[1];
 
-        const currentTemp = Math.round(currentConditions.temp);
+        const currentTemp = Math.round(current.temp);
         const dailyHigh = Math.round(todayForecast.tempmax);
         const dailyLow = Math.round(todayForecast.tempmin);
-        const windSpeed = Math.round(currentConditions.windspeed);
-        const conditions = currentConditions.conditions;
+        const windSpeed = Math.round(current.windspeed);
+        const conditions = current.conditions;
         const synopsis = todayForecast.description;
 
+        // ✅ Update the DOM
         document.getElementById('current-temp').textContent = `${currentTemp}°F`;
         document.getElementById('current-condition').textContent = conditions;
         document.getElementById('high-low').innerHTML = `H: <span class="temp-high">${dailyHigh}°</span> / L: <span class="temp-low">${dailyLow}°</span>`;
-
         document.getElementById('wind-speed').textContent = `Wind: ${windSpeed} mph`;
         document.getElementById('forecast-synopsis').querySelector('p').textContent = synopsis;
-        
+
+        // ✅ New fields
         document.getElementById("humidity").textContent = `Humidity: ${Math.round(current.humidity)}%`;
         document.getElementById("feels-like").textContent = `Feels like: ${Math.round(current.feelslike)}°`;
-        document.getElementById("tomorrow-forecast").textContent = `Tomorrow: H: ${Math.round(tomorrow.tempmax)}° / L: ${Math.round(tomorrow.tempmin)}°`;
+        document.getElementById("tomorrow-forecast").textContent = `Tomorrow: H: ${Math.round(tomorrowForecast.tempmax)}° / L: ${Math.round(tomorrowForecast.tempmin)}°`;
 
     } catch (error) {
         console.error("Could not fetch current weather:", error);
-        document.getElementById('weather-location').textContent = "Weather data unavailable.";
+        document.getElementById('weather-location')?.textContent = "Weather data unavailable.";
     }
 }
+
 // --- Initialize Charts and Load Initial Data ---
 document.addEventListener('DOMContentLoaded', () => {
     displayCurrentWeather();
