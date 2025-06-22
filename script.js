@@ -339,7 +339,11 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
                 garageHistory.push(parseFloat(cols[1]));   // GarageTemp
                 freezerHistory.push(parseFloat(cols[2]));  // FreezerTemp
                 fridgeHistory.push(parseFloat(cols[3]));   // FridgeTemp
-                lastHeaterRunTime = parseFloat(cols[4]);
+//                lastHeaterRunTime = parseFloat(cols[4]);
+                 const currentRunTime = parseFloat(cols[4]); // Get runtime for this row
+                if (!isNaN(currentRunTime)) {
+                    totalHeaterRunTime += currentRunTime; // MODIFIED: Add to total
+                }
                 const heaterStatus = parseInt(cols[5].trim().replace('\r', ''));
                 heaterStatusHistory.push(heaterStatus);
                 lastHeaterStatus = heaterStatus;
@@ -377,13 +381,27 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
             console.log(`DEBUG: Values to display - Fridge Max: ${fridgeMinMax.max}, Freezer Max: ${freezerMinMax.max}`);
                       
           // Update heater live display with last values in range
-            if (lastHeaterRunTime !== null && liveHeaterValueElement) {
+           /* if (lastHeaterRunTime !== null && liveHeaterValueElement) {
                 liveHeaterValueElement.textContent = lastHeaterRunTime.toFixed(2);
+          
             }
             if (lastHeaterStatus !== null && liveHeaterStatusElement) {
                 liveHeaterStatusElement.textContent = lastHeaterStatus === 1 ? "On" : "Off";
             }
-            
+            */
+                      // MODIFIED: Update heater live display with TOTAL run time
+            if (liveHeaterValueElement) {
+                if (totalHeaterRunTime > 60) {
+                    // Display in minutes if over 60 seconds
+                    liveHeaterValueElement.textContent = `${(totalHeaterRunTime / 60).toFixed(1)} min`;
+                } else {
+                    // Display in seconds otherwise
+                    liveHeaterValueElement.textContent = `${totalHeaterRunTime.toFixed(0)} s`;
+                }
+            }
+            if (lastHeaterStatus !== null && liveHeaterStatusElement) {
+                liveHeaterStatusElement.textContent = lastHeaterStatus === 1 ? "On" : "Off";
+            }
             if (timeHistory.length > 0) {
                 fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours);
             }
