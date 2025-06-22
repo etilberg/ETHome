@@ -381,14 +381,7 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
             console.log(`DEBUG: Values to display - Fridge Max: ${fridgeMinMax.max}, Freezer Max: ${freezerMinMax.max}`);
                       
           // Update heater live display with last values in range
-           /* if (lastHeaterRunTime !== null && liveHeaterValueElement) {
-                liveHeaterValueElement.textContent = lastHeaterRunTime.toFixed(2);
-          
-            }
-            if (lastHeaterStatus !== null && liveHeaterStatusElement) {
-                liveHeaterStatusElement.textContent = lastHeaterStatus === 1 ? "On" : "Off";
-            }
-            */
+ 
                       // MODIFIED: Update heater live display with TOTAL run time
             if (liveHeaterValueElement) {
                 if (totalHeaterRunTime > 60) {
@@ -537,9 +530,9 @@ function connectTempMonitorSSE() {
             if (jsonData.garage !== undefined) liveGarageElement.textContent = jsonData.garage.toFixed(1);
             
             // --- Update New Heater Display Elements ---
-            if (jsonData.heater !== undefined && liveHeaterValueElement) {
+           /* if (jsonData.heater !== undefined && liveHeaterValueElement) {
                 liveHeaterValueElement.textContent = jsonData.heater.toFixed(2); // Assuming it's a numeric value
-            }
+            }*/
             if (jsonData.heateron !== undefined && liveHeaterStatusElement) {
                 liveHeaterStatusElement.textContent = (jsonData.heateron === 1 || jsonData.heateron === "1") ? "On" : "Off";
             }
