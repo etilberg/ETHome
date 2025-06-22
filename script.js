@@ -149,6 +149,10 @@ async function displayCurrentWeather() {
 
         document.getElementById('wind-speed').textContent = `Wind: ${windSpeed} mph`;
         document.getElementById('forecast-synopsis').querySelector('p').textContent = synopsis;
+        
+        document.getElementById("humidity").textContent = `Humidity: ${Math.round(current.humidity)}%`;
+        document.getElementById("feels-like").textContent = `Feels like: ${Math.round(current.feelslike)}°`;
+        document.getElementById("tomorrow-forecast").textContent = `Tomorrow: H: ${Math.round(tomorrow.tempmax)}° / L: ${Math.round(tomorrow.tempmin)}°`;
 
     } catch (error) {
         console.error("Could not fetch current weather:", error);
