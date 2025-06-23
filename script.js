@@ -889,3 +889,63 @@ function fetchSumpAnalyticsData() {
             console.error("DEBUG: Failed to fetch sump history for analytics:", error);
         });
 }
+
+// ================================
+// Fridge Heater Control Logic
+// ================================
+
+const FRIDGE_DEVICE_ID = TEMP_MONITOR_DEVICE_ID;           // From config.js
+const FRIDGE_ACCESS_TOKEN = TEMP_MONITOR_ACCESS_TOKEN;
+
+const FRIDGE_HEATER_VARIABLE_NAME = "FridgeHeaterEnabled"; // Your variable name
+const FRIDGE_HEATER_FUNCTION_NAME = "setFridgeHeater";    // Your function name
+
+const fridgeButton = document.getElementById("fridge-toggle-button");
+const fridgeStatus = document.getElementById("fridge-toggle-status");
+
+async function fetchFridgeHeaterState() {
+  try {
+    const resp = await fetch(`https://api.particle.io/v1/devices/${FRIDGE_DEVICE_ID}/${FRIDGE_HEATER_VARIABLE_NAME}?access_token=${FRIDGE_ACCESS_TOKEN}`);
+    const data = await resp.json();
+    if (data && "result" in data) {
+      const isEnabled = data.result;
+      updateFridgeButton(isEnabled);
+    }
+  } catch (error) {
+    console.error("Error fetching Fridge Heater state:", error);
+    fridgeButton.textContent = "Error";
+  }
+}
+
+function updateFridgeButton(isEnabled) {
+  fridgeButton.textContent = isEnabled ? "Turn OFF Fridge Heater" : "Turn ON Fridge Heater";
+  fridgeStatus.textContent = `Fridge Heater is ${isEnabled ? "Enabled" : "Disabled"}`;
+}
+
+async function toggleFridgeHeater() {
+  const action = fridgeButton.textContent.includes("OFF") ? "off" : "on";
+  try {
+    const resp = await fetch(`https://api.particle.io/v1/devices/${FRIDGE_DEVICE_ID}/${FRIDGE_HEATER_FUNCTION_NAME}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: `access_token=${FRIDGE_ACCESS_TOKEN}&args=${action}`
+    });
+    const data = await resp.json();
+    if (data && data.return_value !== undefined) {
+      // After call, refresh state
+      fetchFridgeHeaterState();
+    }
+  } catch (error) {
+    console.error("Error toggling Fridge Heater:", error);
+    alert("Error toggling Fridge Heater.");
+  }
+}
+
+// Event listener
+fridgeButton.addEventListener("click", toggleFridgeHeater);
+
+// Init
+fetchFridgeHeaterState();
+
