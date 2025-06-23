@@ -900,8 +900,12 @@ const FRIDGE_ACCESS_TOKEN = TEMP_MONITOR_ACCESS_TOKEN;
 const FRIDGE_HEATER_VARIABLE_NAME = "FridgeHeaterEnabled"; // Your variable name
 const FRIDGE_HEATER_FUNCTION_NAME = "setFridgeHeater";    // Your function name
 
-const fridgeButton = document.getElementById("fridge-toggle-button");
-const fridgeStatus = document.getElementById("fridge-toggle-status");
+window.addEventListener("load", () => {
+    // Now it's safe to grab the element
+    const fridgeButton = document.getElementById("fridge-toggle-button");
+    const fridgeStatus = document.getElementById("fridge-toggle-status");
+    // ... rest of your initialization
+});
 
 async function fetchFridgeHeaterState() {
   try {
