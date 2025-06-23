@@ -937,7 +937,7 @@ async function fetchFridgeHeaterState() {
 }
 
 function updateFridgeButton(isEnabled) {
-  fridgeButton.textContent = isEnabled ? "Turn OFF Fridge Heater" : "Turn ON Fridge Heater";
+  fridgeButton.textContent = isEnabled ? "Disable Fridge Heater" : "Enable Fridge Heater";
   fridgeStatus.textContent = `Fridge Heater is ${isEnabled ? "Enabled" : "Disabled"}`;
 }
 
