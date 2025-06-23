@@ -942,8 +942,24 @@ function updateFridgeButton(isEnabled) {
 }
 
 async function toggleFridgeHeater() {
-  const action = fridgeButton.textContent.includes("OFF") ? "o
-
+  const action = fridgeButton.textContent.includes("OFF") ? "off" : "on";
+  try {
+    const resp = await fetch(`https://api.particle.io/v1/devices/${FRIDGE_DEVICE_ID}/${FRIDGE_HEATER_FUNCTION_NAME}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: `access_token=${FRIDGE_ACCESS_TOKEN}&args=${action}`
+    });
+    const data = await resp.json();
+    if (data && data.return_value !== undefined) {
+      fetchFridgeHeaterState();
+    }
+  } catch (error) {
+    console.error("Error toggling Fridge Heater:", error);
+    alert("Error toggling Fridge Heater.");
+  }
+}
 // Init
 fetchFridgeHeaterState();
 
