@@ -906,20 +906,25 @@ const fridgeStatus = document.getElementById("fridge-toggle-status");
 async function fetchFridgeHeaterState() {
   try {
     const resp = await fetch(`https://api.particle.io/v1/devices/${FRIDGE_DEVICE_ID}/${FRIDGE_HEATER_VARIABLE_NAME}?access_token=${FRIDGE_ACCESS_TOKEN}`);
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      console.error("Error response:", errorText);
+      fridgeButton.textContent = "Error Loading State";
+      return;
+    }
     const data = await resp.json();
+    console.log("Fridge Heater State:", data);
     if (data && "result" in data) {
       const isEnabled = data.result;
       updateFridgeButton(isEnabled);
+    } else {
+      console.error("Invalid response:", data);
+      fridgeButton.textContent = "Error Loading State";
     }
   } catch (error) {
     console.error("Error fetching Fridge Heater state:", error);
-    fridgeButton.textContent = "Error";
+    fridgeButton.textContent = "Error Loading State";
   }
-}
-
-function updateFridgeButton(isEnabled) {
-  fridgeButton.textContent = isEnabled ? "Turn OFF Fridge Heater" : "Turn ON Fridge Heater";
-  fridgeStatus.textContent = `Fridge Heater is ${isEnabled ? "Enabled" : "Disabled"}`;
 }
 
 async function toggleFridgeHeater() {
