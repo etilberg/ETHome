@@ -292,6 +292,7 @@ function resetZoomOnAllCharts() {
 }
 */
 // --- Fetch Historical Data for Temp Monitor ---
+// --- Fetch Historical Data for Temp Monitor ---
 function fetchTempMonitorHistoricalData(rangeHours = 1) {
     console.log(`DEBUG: Fetching Temp Monitor historical data for last ${rangeHours} hours.`);
 
@@ -312,45 +313,71 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
                 return;
             }
 
-            const now = new Date();
-
             // Clear existing history arrays
             timeHistory.length = 0;
             fridgeHistory.length = 0;
             freezerHistory.length = 0;
             garageHistory.length = 0;
             heaterStatusHistory.length = 0;
+            
+            // --- NEW LOGIC FOR RUNTIME CALCULATION ---
+            let totalHeaterRunTimeMs = 0; // Total runtime in milliseconds
+            let runStartTime = null;      // Timestamp when a run cycle starts
+            const now = new Date();
 
-            let totalHeaterRunTime = 0;
-            let lastHeaterRunTime = null;
-            let lastHeaterStatus = null;
-
-            // Parse CSV rows
-            lines.slice(1).forEach(line => {
+            // First, filter all relevant data points from the CSV into an array
+            // This assumes the CSV is sorted chronologically
+            const dataInRange = lines.slice(1).map(line => {
                 const cols = line.split(',');
                 const ts = new Date(cols[0]);
-
-                if (isNaN(ts.getTime())) return;
+                if (isNaN(ts.getTime())) return null;
 
                 const diffHours = (now - ts) / (1000 * 60 * 60);
-                if (diffHours > rangeHours) return;
+                if (diffHours > rangeHours) return null;
 
-                timeHistory.push(ts);
-                garageHistory.push(parseFloat(cols[1]));   // GarageTemp
-                freezerHistory.push(parseFloat(cols[2]));  // FreezerTemp
-                fridgeHistory.push(parseFloat(cols[3]));   // FridgeTemp
-//                lastHeaterRunTime = parseFloat(cols[4]);
-                 const currentRunTime = parseFloat(cols[4]); // Get runtime for this row
-                if (!isNaN(currentRunTime)) {
-                    totalHeaterRunTime += currentRunTime; // MODIFIED: Add to total
+                return {
+                    ts: ts,
+                    garage: parseFloat(cols[1]),
+                    freezer: parseFloat(cols[2]),
+                    fridge: parseFloat(cols[3]),
+                    heaterStatus: parseInt(cols[5].trim().replace('\r', ''))
+                };
+            }).filter(p => p !== null); // Remove any null (invalid or out-of-range) entries
+
+            // Now, iterate through the filtered data to calculate runtime and populate charts
+            for (const point of dataInRange) {
+                const { ts, heaterStatus } = point;
+
+                // If heater turns ON and a run cycle wasn't already started
+                if (heaterStatus === 1 && !runStartTime) {
+                    runStartTime = ts;
+                } 
+                // If heater turns OFF and a run cycle WAS in progress
+                else if (heaterStatus === 0 && runStartTime) {
+                    const duration = ts.getTime() - runStartTime.getTime();
+                    totalHeaterRunTimeMs += duration;
+                    runStartTime = null; // Reset for the next cycle
                 }
-                const heaterStatus = parseInt(cols[5].trim().replace('\r', ''));
-                heaterStatusHistory.push(heaterStatus);
-                lastHeaterStatus = heaterStatus;
-            });
+
+                // Push data to chart history arrays
+                timeHistory.push(point.ts);
+                fridgeHistory.push(point.fridge);
+                freezerHistory.push(point.freezer);
+                garageHistory.push(point.garage);
+                heaterStatusHistory.push(point.heaterStatus);
+            }
+
+            // Edge Case: Handle a run cycle that is still active at the end of the time range
+            if (runStartTime && timeHistory.length > 0) {
+                const lastTimestamp = timeHistory[timeHistory.length - 1];
+                const duration = lastTimestamp.getTime() - runStartTime.getTime();
+                totalHeaterRunTimeMs += duration;
+            }
+            // --- END OF NEW LOGIC ---
 
             console.log(`DEBUG: Loaded ${timeHistory.length} points of fridge/freezer/garage history.`);
 
+            // Update charts with the new data
             if (fridgeChartInstance) {
                 fridgeChartInstance.data.labels = timeHistory;
                 fridgeChartInstance.data.datasets[0].data = fridgeHistory;
@@ -367,34 +394,40 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
                 garageChartInstance.data.datasets[0].data = garageHistory;
                 garageChartInstance.update();
             }
-          
-          //  ---fill MIN/MAX array---
+
             const fridgeMinMax = calculateMinMax(fridgeHistory);
             const freezerMinMax = calculateMinMax(freezerHistory);
             const garageMinMax = calculateMinMax(garageHistory);
-            
-            // --- NEW, FOOLish FORMAT using classic string concatenation ---
+
             document.getElementById('fridge-stats').innerHTML = `H: <span class="temp-high">${fridgeMinMax.max.toFixed(0)}°</span> / L: <span class="temp-low">${fridgeMinMax.min.toFixed(0)}°</span>`;
             document.getElementById('freezer-stats').innerHTML = `H: <span class="temp-high">${freezerMinMax.max.toFixed(0)}°</span> / L: <span class="temp-low">${freezerMinMax.min.toFixed(0)}°</span>`;
             document.getElementById('garage-stats').innerHTML = `H: <span class="temp-high">${garageMinMax.max?.toFixed(0)}°</span> / L: <span class="temp-low">${garageMinMax.min?.toFixed(0)}°</span>`;
-            // --- Sanity Check Log ---
-            console.log(`DEBUG: Values to display - Fridge Max: ${fridgeMinMax.max}, Freezer Max: ${freezerMinMax.max}`);
-                      
-          // Update heater live display with last values in range
- 
-                      // MODIFIED: Update heater live display with TOTAL run time
+
+            // Update heater display with the calculated total run time
             if (liveHeaterValueElement) {
-                if (totalHeaterRunTime > 60) {
-                    // Display in minutes if over 60 seconds
-                    liveHeaterValueElement.textContent = `${(totalHeaterRunTime / 60).toFixed(1)} min`;
+                const totalHeaterRunTimeSeconds = totalHeaterRunTimeMs / 1000;
+            
+                if (totalHeaterRunTimeSeconds >= 5400) {
+                    // 5400 seconds = 90 minutes
+                    const hours = Math.floor(totalHeaterRunTimeSeconds / 3600);
+                    const minutes = Math.floor((totalHeaterRunTimeSeconds % 3600) / 60);
+                    liveHeaterValueElement.textContent = minutes > 0 
+                        ? `${hours}h ${minutes}m`
+                        : `${hours}h`;
+                } else if (totalHeaterRunTimeSeconds > 60) {
+                    // Between 1 minute and 90 minutes
+                    liveHeaterValueElement.textContent = `${(totalHeaterRunTimeSeconds / 60).toFixed(1)} min`;
                 } else {
-                    // Display in seconds otherwise
-                    liveHeaterValueElement.textContent = `${totalHeaterRunTime.toFixed(0)} s`;
+                    // Under 1 minute
+                    liveHeaterValueElement.textContent = `${Math.round(totalHeaterRunTimeSeconds)} s`;
                 }
             }
-            if (lastHeaterStatus !== null && liveHeaterStatusElement) {
+
+            if (heaterStatusHistory.length > 0 && liveHeaterStatusElement) {
+                const lastHeaterStatus = heaterStatusHistory[heaterStatusHistory.length - 1];
                 liveHeaterStatusElement.textContent = lastHeaterStatus === 1 ? "On" : "Off";
             }
+            
             if (timeHistory.length > 0) {
                 fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours);
             }
