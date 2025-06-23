@@ -894,17 +894,22 @@ function fetchSumpAnalyticsData() {
 // Fridge Heater Control Logic
 // ================================
 
-const FRIDGE_DEVICE_ID = TEMP_MONITOR_DEVICE_ID;           // From config.js
+const FRIDGE_DEVICE_ID = TEMP_MONITOR_DEVICE_ID;
 const FRIDGE_ACCESS_TOKEN = TEMP_MONITOR_ACCESS_TOKEN;
 
 const FRIDGE_HEATER_VARIABLE_NAME = "FridgeHeaterEnabled"; // Your variable name
 const FRIDGE_HEATER_FUNCTION_NAME = "setFridgeHeater";    // Your function name
 
+// Get Elements ONCE (global scope)
+const fridgeButton = document.getElementById("fridge-toggle-button");
+const fridgeStatus = document.getElementById("fridge-toggle-status");
+
 window.addEventListener("load", () => {
-    // Now it's safe to grab the element
-    const fridgeButton = document.getElementById("fridge-toggle-button");
-    const fridgeStatus = document.getElementById("fridge-toggle-status");
-    // ... rest of your initialization
+  // Add click listener after load
+  fridgeButton?.addEventListener("click", toggleFridgeHeater);
+
+  // Initialize state
+  fetchFridgeHeaterState();
 });
 
 async function fetchFridgeHeaterState() {
@@ -931,29 +936,13 @@ async function fetchFridgeHeaterState() {
   }
 }
 
-async function toggleFridgeHeater() {
-  const action = fridgeButton.textContent.includes("OFF") ? "off" : "on";
-  try {
-    const resp = await fetch(`https://api.particle.io/v1/devices/${FRIDGE_DEVICE_ID}/${FRIDGE_HEATER_FUNCTION_NAME}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: `access_token=${FRIDGE_ACCESS_TOKEN}&args=${action}`
-    });
-    const data = await resp.json();
-    if (data && data.return_value !== undefined) {
-      // After call, refresh state
-      fetchFridgeHeaterState();
-    }
-  } catch (error) {
-    console.error("Error toggling Fridge Heater:", error);
-    alert("Error toggling Fridge Heater.");
-  }
+function updateFridgeButton(isEnabled) {
+  fridgeButton.textContent = isEnabled ? "Turn OFF Fridge Heater" : "Turn ON Fridge Heater";
+  fridgeStatus.textContent = `Fridge Heater is ${isEnabled ? "Enabled" : "Disabled"}`;
 }
 
-// Event listener
-fridgeButton.addEventListener("click", toggleFridgeHeater);
+async function toggleFridgeHeater() {
+  const action = fridgeButton.textContent.includes("OFF") ? "o
 
 // Init
 fetchFridgeHeaterState();
