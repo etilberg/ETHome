@@ -41,6 +41,36 @@ let fridgeChartInstance, freezerChartInstance, garageChartInstance;
 let sumpTempChartInstance, sumpPowerChartInstance, sumpRuntimeChartInstance, sumpSinceRunChartInstance;
 let sumpRunsPerDayChartInstance; 
 
+// ================================
+// 🔁 Shared Visual Crossing Cache
+// ================================
+const visualCrossingDayCache = {};  // { "2025-06-30": { data, timestamp } }
+
+async function fetchVisualCrossingDay(dateStr) {
+  // Return cached result if available and fresh (<15 min)
+  const cached = visualCrossingDayCache[dateStr];
+  if (cached && Date.now() - cached.timestamp < 15 * 60 * 1000) {
+    console.debug(`DEBUG: Using cached Visual Crossing data for ${dateStr}`);
+    return cached.data;
+  }
+
+  // Fetch new data
+  const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${dateStr}?unitGroup=us&include=hours,current&key=${VISUAL_CROSSING_API_KEY}&contentType=json`;
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP error ${res.status} fetching VC data for ${dateStr}`);
+
+  const json = await res.json();
+  visualCrossingDayCache[dateStr] = {
+    timestamp: Date.now(),
+    data: json
+  };
+
+  console.debug(`DEBUG: Fetched and cached Visual Crossing data for ${dateStr}`);
+  return json;
+}
+
+
 function calculateMinMax(array) {
   if (!array.length) return { min: null, max: null };
   return {
@@ -120,25 +150,20 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
 
 // --- Function to Fetch and Display Current Weather ---
 async function displayCurrentWeather() {
-    if (typeof VISUAL_CROSSING_API_KEY === 'undefined' || VISUAL_CROSSING_API_KEY.includes("YOUR_")) {
+   /* if (typeof VISUAL_CROSSING_API_KEY === 'undefined' || VISUAL_CROSSING_API_KEY.includes("YOUR_")) {
         console.error("DEBUG: Visual Crossing API Key not set in config.js");
         return;
     }
 
     const location = 'Watertown,SD';
     const apiUrl = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/${location}?unitGroup=us&include=current&key=${VISUAL_CROSSING_API_KEY}&contentType=json`;
-
-    try {
-        const response = await fetch(apiUrl);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-
+*/
+        const today = new Date().toISOString().split("T")[0]; // e.g., "2025-06-30"
+        const data = await fetchVisualCrossingDay(today);
+        
         const current = data.currentConditions;
         const todayForecast = data.days[0];
-        const tomorrowForecast = data.days[1];
+        const tomorrowForecast = data.days[1]; // if available
 
         const currentTemp = Math.round(current.temp);
         const dailyHigh = Math.round(todayForecast.tempmax);
@@ -755,8 +780,8 @@ async function fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours) {
                 const cachedData = new Map(cached.data);
                 cachedData.forEach((value, key) => outdoorTimeTempMap.set(key, value));
             } else {
-                const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${day}/${day}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
-                console.debug("DEBUG: Fetching Visual Crossing weather data for day:", day);
+             const data = await fetchVisualCrossingDay(dateStr);   
+              console.debug("DEBUG: Fetching Visual Crossing weather data for day:", day);
                 
                 const promise = fetch(url)
                     .then(res => {
@@ -831,8 +856,8 @@ async function fetchSumpPrecipitation(timeHistory, rangeHours) {
                 const cachedData = new Map(cached.data);
                 cachedData.forEach((value, key) => precipTimeMap.set(key, value));
             } else {
-                const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${day}/${day}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
-                console.debug("DEBUG: Fetching Visual Crossing precipitation data for day:", day);
+                const data = await fetchVisualCrossingDay(dateStr);
+              console.debug("DEBUG: Fetching Visual Crossing precipitation data for day:", day);
                 
                 const promise = fetch(url)
                     .then(res => {
