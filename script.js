@@ -739,15 +739,12 @@ async function fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours) {
         return;
     }
 
-    // Prevent querying if range is too short for hourly data
     if (rangeHours < 3) {
         console.debug("DEBUG: Outdoor temp resolution too coarse for <3h range");
         return;
     }
 
-    // Format: YYYY-MM-DDTHH:mm:ss
     function formatVCDate(date) {
-        // Ensure date is a valid Date object before calling methods on it
         const d = new Date(date);
         if (isNaN(d.getTime())) {
             throw new Error("Invalid time value provided to formatVCDate");
@@ -758,10 +755,17 @@ async function fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours) {
     try {
         const start = timeHistory[0];
         const end = timeHistory[timeHistory.length - 1];
-        const startDateStr = formatVCDate(start);
-        const endDateStr = formatVCDate(end);
 
-        const cacheKey = `vc_outdoor_${startDateStr}_${endDateStr}`;
+        // --- FIX: Round timestamps to the hour for a consistent cache key ---
+        const startCacheDate = new Date(start.getTime());
+        startCacheDate.setMinutes(0, 0, 0); // Round down to the beginning of the hour
+        const endCacheDate = new Date(end.getTime());
+        endCacheDate.setMinutes(0, 0, 0);   // Round down to the beginning of the hour
+
+        const startDateStr = formatVCDate(start); // Use original for API call
+        const endDateStr = formatVCDate(end);     // Use original for API call
+
+        const cacheKey = `vc_outdoor_${formatVCDate(startCacheDate)}_${formatVCDate(endCacheDate)}`; // Use rounded dates for key
         const cacheMinutes = 15;
         const cached = outdoorTempCache[cacheKey];
         const now = Date.now();
@@ -787,21 +791,19 @@ async function fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours) {
 
             const mappedTemps = timeHistory.map(t => {
                 const date = new Date(t);
-                // Round the timestamp down to the beginning of the hour
                 const hourTs = Math.floor(date.getTime() / 3600000) * 3600000;
                 return outdoorTimeTempMap.get(hourTs) ?? null;
             });
 
             garageOutdoorTemps = mappedTemps;
+            // Store the newly fetched data in the cache with the rounded key
             outdoorTempCache[cacheKey] = { timestamp: now, data: mappedTemps };
         }
 
-        // *** FIX: Use the correct chart instance variable 'garageChartInstance' ***
         if (garageChartInstance) {
             const outdoorDataset = garageChartInstance.data.datasets.find(d => d.label === "Outdoor Temp (°F)");
             if (outdoorDataset) {
                 outdoorDataset.data = garageOutdoorTemps;
-                // Important: The labels for the garage chart should still be the main 'timeHistory'
                 garageChartInstance.data.labels = timeHistory;
                 garageChartInstance.update();
                 console.debug(`DEBUG: Updated garage chart with ${garageOutdoorTemps.filter(v => v !== null).length} outdoor temp points.`);
@@ -826,12 +828,18 @@ async function fetchSumpPrecipitation(timeHistory, rangeHours) {
     try {
         const start = timeHistory[0];
         const end = timeHistory[timeHistory.length - 1];
-        const startDateStr = formatVCDate(start);
-        const endDateStr = formatVCDate(end);
         
-        // --- CACHING LOGIC ---
-        const cacheKey = `vc_precip_${startDateStr}_${endDateStr}`;
-        const cacheMinutes = 30;
+        // --- FIX: Round timestamps to the hour for a consistent cache key ---
+        const startCacheDate = new Date(start.getTime());
+        startCacheDate.setMinutes(0, 0, 0); // Round down to the beginning of the hour
+        const endCacheDate = new Date(end.getTime());
+        endCacheDate.setMinutes(0, 0, 0);   // Round down to the beginning of the hour
+
+        const startDateStr = formatVCDate(start); // Use original start for API call
+        const endDateStr = formatVCDate(end);     // Use original end for API call
+        
+        const cacheKey = `vc_precip_${formatVCDate(startCacheDate)}_${formatVCDate(endCacheDate)}`; // Use rounded dates for key
+        const cacheMinutes = 15;
         const cached = precipCache[cacheKey];
         const now = Date.now();
         let mappedPrecip;
@@ -861,10 +869,8 @@ async function fetchSumpPrecipitation(timeHistory, rangeHours) {
                 return precipTimeMap.get(hourTs) ?? 0;
             });
 
-            // Store the newly fetched data in the cache
             precipCache[cacheKey] = { timestamp: now, data: mappedPrecip };
         }
-        // --- END OF CACHING LOGIC ---
 
         if (sumpSinceRunChartInstance) {
             const precipDataset = sumpSinceRunChartInstance.data.datasets.find(d => d.label === "Precipitation (in)");
