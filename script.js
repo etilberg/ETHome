@@ -740,13 +740,11 @@ async function fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours) {
         const outdoorTimeTempMap = new Map();
         const dailyPromises = [];
 
-        // Create a set of unique days to fetch
         const daysToFetch = new Set();
         timeHistory.forEach(t => {
             daysToFetch.add(new Date(t).toISOString().split('T')[0]);
         });
 
-        // Loop through each unique day and create a fetch promise
         for (const day of daysToFetch) {
             const cacheKey = `vc_outdoor_${day}`;
             const cached = outdoorTempCache[cacheKey];
@@ -760,22 +758,36 @@ async function fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours) {
                 const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${day}/${day}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
                 console.debug("DEBUG: Fetching Visual Crossing weather data for day:", day);
                 
-                dailyPromises.push(fetch(url).then(res => res.json()).then(json => {
-                    const hours = (json.days && json.days[0] && json.days[0].hours) || [];
-                    const dailyDataToCache = [];
-                    for (const hour of hours) {
-                        const ts = new Date(hour.datetimeEpoch * 1000).getTime();
-                        outdoorTimeTempMap.set(ts, hour.temp);
-                        dailyDataToCache.push([ts, hour.temp]);
-                    }
-                    outdoorTempCache[cacheKey] = { timestamp: now, data: dailyDataToCache };
-                }));
+                const promise = fetch(url)
+                    .then(res => {
+                        if (!res.ok) throw new Error(`HTTP error ${res.status} for day ${day}`);
+                        return res.json();
+                    })
+                    .then(json => {
+                        const hours = (json.days && json.days[0] && json.days[0].hours) || [];
+                        const dailyDataToCache = [];
+                        for (const hour of hours) {
+                            const ts = new Date(hour.datetimeEpoch * 1000).getTime();
+                            outdoorTimeTempMap.set(ts, hour.temp);
+                            dailyDataToCache.push([ts, hour.temp]);
+                        }
+                        outdoorTempCache[cacheKey] = { timestamp: now, data: dailyDataToCache };
+                    });
+                dailyPromises.push(promise);
             }
         }
 
-        // Wait for all new fetches to complete
-        await Promise.all(dailyPromises);
+        // Use Promise.allSettled to wait for all promises, even if some fail.
+        const results = await Promise.allSettled(dailyPromises);
+        
+        // Log any individual failures for debugging, but don't stop the process.
+        results.forEach(result => {
+            if (result.status === 'rejected') {
+                console.error("DEBUG: A daily outdoor temp fetch failed:", result.reason);
+            }
+        });
 
+        // Continue to process whatever data was successfully fetched.
         const mappedTemps = timeHistory.map(t => {
             const hourTs = Math.floor(new Date(t).getTime() / 3600000) * 3600000;
             return outdoorTimeTempMap.get(hourTs) ?? null;
@@ -804,44 +816,54 @@ async function fetchSumpPrecipitation(timeHistory, rangeHours) {
         const precipTimeMap = new Map();
         const dailyPromises = [];
         
-        // Create a set of unique days to fetch
         const daysToFetch = new Set();
         timeHistory.forEach(t => {
             daysToFetch.add(new Date(t).toISOString().split('T')[0]);
         });
 
-        // Loop through each unique day and create a fetch promise
         for (const day of daysToFetch) {
             const cacheKey = `vc_precip_${day}`;
             const cached = precipCache[cacheKey];
             const now = Date.now();
 
             if (cached && (now - cached.timestamp < 15 * 60000)) {
-                // If cached, add its data directly to the map
                 console.debug(`DEBUG: Using cached precipitation data for ${day}.`);
                 const cachedData = new Map(cached.data);
                 cachedData.forEach((value, key) => precipTimeMap.set(key, value));
             } else {
-                // Otherwise, create a promise to fetch it
                 const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${day}/${day}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
                 console.debug("DEBUG: Fetching Visual Crossing precipitation data for day:", day);
                 
-                dailyPromises.push(fetch(url).then(res => res.json()).then(json => {
-                    const hours = (json.days && json.days[0] && json.days[0].hours) || [];
-                    const dailyDataToCache = [];
-                    for (const hour of hours) {
-                        const ts = new Date(hour.datetimeEpoch * 1000).getTime();
-                        precipTimeMap.set(ts, hour.precip);
-                        dailyDataToCache.push([ts, hour.precip]);
-                    }
-                    precipCache[cacheKey] = { timestamp: now, data: dailyDataToCache };
-                }));
+                const promise = fetch(url)
+                    .then(res => {
+                        if (!res.ok) throw new Error(`HTTP error ${res.status} for day ${day}`);
+                        return res.json();
+                    })
+                    .then(json => {
+                        const hours = (json.days && json.days[0] && json.days[0].hours) || [];
+                        const dailyDataToCache = [];
+                        for (const hour of hours) {
+                            const ts = new Date(hour.datetimeEpoch * 1000).getTime();
+                            precipTimeMap.set(ts, hour.precip);
+                            dailyDataToCache.push([ts, hour.precip]);
+                        }
+                        precipCache[cacheKey] = { timestamp: now, data: dailyDataToCache };
+                    });
+                dailyPromises.push(promise);
             }
         }
 
-        // Wait for all new fetches to complete
-        await Promise.all(dailyPromises);
+        // Use Promise.allSettled to wait for all promises, even if some fail.
+        const results = await Promise.allSettled(dailyPromises);
 
+        // Log any individual failures for debugging, but don't stop the process.
+        results.forEach(result => {
+            if (result.status === 'rejected') {
+                console.error("DEBUG: A daily precipitation fetch failed:", result.reason);
+            }
+        });
+
+        // Continue to process whatever data was successfully fetched.
         const mappedPrecip = timeHistory.map(t => {
             const hourTs = Math.floor(new Date(t).getTime() / 3600000) * 3600000;
             return precipTimeMap.get(hourTs) ?? 0;
