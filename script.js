@@ -734,79 +734,60 @@ function connectSumpMonitorSSE() {
 async function fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours) {
     console.debug(`DEBUG: Fetching outdoor temps for ${rangeHours} hours`);
 
-    if (!timeHistory || timeHistory.length === 0) {
-        console.debug("DEBUG: Outdoor temp fetch skipped — timeHistory is empty.");
-        return;
-    }
-
-    if (rangeHours < 3) {
-        console.debug("DEBUG: Outdoor temp resolution too coarse for <3h range");
-        return;
-    }
-
-    function formatVCDate(date) {
-        const d = new Date(date);
-        if (isNaN(d.getTime())) {
-            throw new Error("Invalid time value provided to formatVCDate");
-        }
-        return d.toISOString().split('.')[0];
-    }
+    if (!timeHistory || timeHistory.length === 0 || rangeHours < 1) return;
 
     try {
-        const start = timeHistory[0];
-        const end = timeHistory[timeHistory.length - 1];
+        const outdoorTimeTempMap = new Map();
+        const dailyPromises = [];
 
-        // --- FIX: Round timestamps to the hour for a consistent cache key ---
-        const startCacheDate = new Date(start.getTime());
-        startCacheDate.setMinutes(0, 0, 0); // Round down to the beginning of the hour
-        const endCacheDate = new Date(end.getTime());
-        endCacheDate.setMinutes(0, 0, 0);   // Round down to the beginning of the hour
+        // Create a set of unique days to fetch
+        const daysToFetch = new Set();
+        timeHistory.forEach(t => {
+            daysToFetch.add(new Date(t).toISOString().split('T')[0]);
+        });
 
-        const startDateStr = formatVCDate(start); // Use original for API call
-        const endDateStr = formatVCDate(end);     // Use original for API call
+        // Loop through each unique day and create a fetch promise
+        for (const day of daysToFetch) {
+            const cacheKey = `vc_outdoor_${day}`;
+            const cached = outdoorTempCache[cacheKey];
+            const now = Date.now();
 
-        const cacheKey = `vc_outdoor_${formatVCDate(startCacheDate)}_${formatVCDate(endCacheDate)}`; // Use rounded dates for key
-        const cacheMinutes = 15;
-        const cached = outdoorTempCache[cacheKey];
-        const now = Date.now();
-
-        if (cached && (now - cached.timestamp < cacheMinutes * 60000)) {
-            console.debug(`DEBUG: Using cached outdoor temp data.`);
-            garageOutdoorTemps = cached.data;
-        } else {
-          const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${startDateStr}/${endDateStr}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
-          console.debug("DEBUG: Fetching Visual Crossing weather data:", url);
-
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-            const json = await res.json();
-
-            const hours = (json.days || []).flatMap(day => day.hours || []);
-            const outdoorTimeTempMap = new Map();
-
-            for (const hour of hours) {
-                const ts = new Date(hour.datetimeEpoch * 1000).getTime();
-                outdoorTimeTempMap.set(ts, hour.temp);
+            if (cached && (now - cached.timestamp < 15 * 60000)) {
+                console.debug(`DEBUG: Using cached outdoor temp data for ${day}.`);
+                const cachedData = new Map(cached.data);
+                cachedData.forEach((value, key) => outdoorTimeTempMap.set(key, value));
+            } else {
+                const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${day}/${day}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
+                console.debug("DEBUG: Fetching Visual Crossing weather data for day:", day);
+                
+                dailyPromises.push(fetch(url).then(res => res.json()).then(json => {
+                    const hours = (json.days && json.days[0] && json.days[0].hours) || [];
+                    const dailyDataToCache = [];
+                    for (const hour of hours) {
+                        const ts = new Date(hour.datetimeEpoch * 1000).getTime();
+                        outdoorTimeTempMap.set(ts, hour.temp);
+                        dailyDataToCache.push([ts, hour.temp]);
+                    }
+                    outdoorTempCache[cacheKey] = { timestamp: now, data: dailyDataToCache };
+                }));
             }
-
-            const mappedTemps = timeHistory.map(t => {
-                const date = new Date(t);
-                const hourTs = Math.floor(date.getTime() / 3600000) * 3600000;
-                return outdoorTimeTempMap.get(hourTs) ?? null;
-            });
-
-            garageOutdoorTemps = mappedTemps;
-            // Store the newly fetched data in the cache with the rounded key
-            outdoorTempCache[cacheKey] = { timestamp: now, data: mappedTemps };
         }
+
+        // Wait for all new fetches to complete
+        await Promise.all(dailyPromises);
+
+        const mappedTemps = timeHistory.map(t => {
+            const hourTs = Math.floor(new Date(t).getTime() / 3600000) * 3600000;
+            return outdoorTimeTempMap.get(hourTs) ?? null;
+        });
 
         if (garageChartInstance) {
             const outdoorDataset = garageChartInstance.data.datasets.find(d => d.label === "Outdoor Temp (°F)");
             if (outdoorDataset) {
-                outdoorDataset.data = garageOutdoorTemps;
+                outdoorDataset.data = mappedTemps;
                 garageChartInstance.data.labels = timeHistory;
                 garageChartInstance.update();
-                console.debug(`DEBUG: Updated garage chart with ${garageOutdoorTemps.filter(v => v !== null).length} outdoor temp points.`);
+                console.debug(`DEBUG: Updated garage chart with ${mappedTemps.filter(v => v !== null).length} outdoor temp points.`);
             }
         }
     } catch (error) {
@@ -817,60 +798,54 @@ async function fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours) {
 async function fetchSumpPrecipitation(timeHistory, rangeHours) {
     console.debug(`DEBUG: Fetching precipitation data for ${rangeHours} hours`);
 
-    if (!timeHistory || timeHistory.length === 0) return;
-    if (rangeHours < 1) return;
-    
-    function formatVCDate(date) {
-        const d = new Date(date);
-        return d.toISOString().split('.')[0];
-    }
+    if (!timeHistory || timeHistory.length === 0 || rangeHours < 1) return;
 
     try {
-        const start = timeHistory[0];
-        const end = timeHistory[timeHistory.length - 1];
+        const precipTimeMap = new Map();
+        const dailyPromises = [];
         
-        // --- FIX: Round timestamps to the hour for a consistent cache key ---
-        const startCacheDate = new Date(start.getTime());
-        startCacheDate.setMinutes(0, 0, 0); // Round down to the beginning of the hour
-        const endCacheDate = new Date(end.getTime());
-        endCacheDate.setMinutes(0, 0, 0);   // Round down to the beginning of the hour
+        // Create a set of unique days to fetch
+        const daysToFetch = new Set();
+        timeHistory.forEach(t => {
+            daysToFetch.add(new Date(t).toISOString().split('T')[0]);
+        });
 
-        const startDateStr = formatVCDate(start); // Use original start for API call
-        const endDateStr = formatVCDate(end);     // Use original end for API call
-        
-        const cacheKey = `vc_precip_${formatVCDate(startCacheDate)}_${formatVCDate(endCacheDate)}`; // Use rounded dates for key
-        const cacheMinutes = 15;
-        const cached = precipCache[cacheKey];
-        const now = Date.now();
-        let mappedPrecip;
+        // Loop through each unique day and create a fetch promise
+        for (const day of daysToFetch) {
+            const cacheKey = `vc_precip_${day}`;
+            const cached = precipCache[cacheKey];
+            const now = Date.now();
 
-        if (cached && (now - cached.timestamp < cacheMinutes * 60000)) {
-            console.debug(`DEBUG: Using cached precipitation data.`);
-            mappedPrecip = cached.data;
-        } else {
-            const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${startDateStr}/${endDateStr}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
-            console.debug("DEBUG: Fetching Visual Crossing precipitation data:", url);
-
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-            const json = await res.json();
-
-            const hours = (json.days || []).flatMap(day => day.hours || []);
-            const precipTimeMap = new Map();
-
-            for (const hour of hours) {
-                const ts = new Date(hour.datetimeEpoch * 1000).getTime();
-                precipTimeMap.set(ts, hour.precip);
+            if (cached && (now - cached.timestamp < 15 * 60000)) {
+                // If cached, add its data directly to the map
+                console.debug(`DEBUG: Using cached precipitation data for ${day}.`);
+                const cachedData = new Map(cached.data);
+                cachedData.forEach((value, key) => precipTimeMap.set(key, value));
+            } else {
+                // Otherwise, create a promise to fetch it
+                const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${day}/${day}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
+                console.debug("DEBUG: Fetching Visual Crossing precipitation data for day:", day);
+                
+                dailyPromises.push(fetch(url).then(res => res.json()).then(json => {
+                    const hours = (json.days && json.days[0] && json.days[0].hours) || [];
+                    const dailyDataToCache = [];
+                    for (const hour of hours) {
+                        const ts = new Date(hour.datetimeEpoch * 1000).getTime();
+                        precipTimeMap.set(ts, hour.precip);
+                        dailyDataToCache.push([ts, hour.precip]);
+                    }
+                    precipCache[cacheKey] = { timestamp: now, data: dailyDataToCache };
+                }));
             }
-
-            mappedPrecip = timeHistory.map(t => {
-                const date = new Date(t);
-                const hourTs = Math.floor(date.getTime() / 3600000) * 3600000;
-                return precipTimeMap.get(hourTs) ?? 0;
-            });
-
-            precipCache[cacheKey] = { timestamp: now, data: mappedPrecip };
         }
+
+        // Wait for all new fetches to complete
+        await Promise.all(dailyPromises);
+
+        const mappedPrecip = timeHistory.map(t => {
+            const hourTs = Math.floor(new Date(t).getTime() / 3600000) * 3600000;
+            return precipTimeMap.get(hourTs) ?? 0;
+        });
 
         if (sumpSinceRunChartInstance) {
             const precipDataset = sumpSinceRunChartInstance.data.datasets.find(d => d.label === "Precipitation (in)");
