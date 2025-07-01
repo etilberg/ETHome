@@ -26,7 +26,8 @@ let freezerHistory = [];
 let garageHistory = [];
 let heaterStatusHistory = [];
 let outdoorTempHistory = [];
-let garageOutdoorTemps = []; 
+let garageOutdoorTemps = [];
+let precipCache = {};
 let outdoorTempCache = {}; 
 
 let sumpTimeHistory = [];
@@ -814,13 +815,8 @@ async function fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours) {
 async function fetchSumpPrecipitation(timeHistory, rangeHours) {
     console.debug(`DEBUG: Fetching precipitation data for ${rangeHours} hours`);
 
-    if (!timeHistory || timeHistory.length === 0) {
-        return;
-    }
-    // Visual Crossing API requires at least 1 hour for historical queries
-    if (rangeHours < 1) { 
-        return;
-    }
+    if (!timeHistory || timeHistory.length === 0) return;
+    if (rangeHours < 1) return;
     
     function formatVCDate(date) {
         const d = new Date(date);
@@ -833,27 +829,42 @@ async function fetchSumpPrecipitation(timeHistory, rangeHours) {
         const startDateStr = formatVCDate(start);
         const endDateStr = formatVCDate(end);
         
-        const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${startDateStr}/${endDateStr}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
-        console.debug("DEBUG: Fetching Visual Crossing precipitation data:", url);
+        // --- CACHING LOGIC ---
+        const cacheKey = `vc_precip_${startDateStr}_${endDateStr}`;
+        const cacheMinutes = 30;
+        const cached = precipCache[cacheKey];
+        const now = Date.now();
+        let mappedPrecip;
 
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-        const json = await res.json();
+        if (cached && (now - cached.timestamp < cacheMinutes * 60000)) {
+            console.debug(`DEBUG: Using cached precipitation data.`);
+            mappedPrecip = cached.data;
+        } else {
+            const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${startDateStr}/${endDateStr}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
+            console.debug("DEBUG: Fetching Visual Crossing precipitation data:", url);
 
-        const hours = (json.days || []).flatMap(day => day.hours || []);
-        const precipTimeMap = new Map();
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+            const json = await res.json();
 
-        for (const hour of hours) {
-            const ts = new Date(hour.datetimeEpoch * 1000).getTime();
-            precipTimeMap.set(ts, hour.precip);
+            const hours = (json.days || []).flatMap(day => day.hours || []);
+            const precipTimeMap = new Map();
+
+            for (const hour of hours) {
+                const ts = new Date(hour.datetimeEpoch * 1000).getTime();
+                precipTimeMap.set(ts, hour.precip);
+            }
+
+            mappedPrecip = timeHistory.map(t => {
+                const date = new Date(t);
+                const hourTs = Math.floor(date.getTime() / 3600000) * 3600000;
+                return precipTimeMap.get(hourTs) ?? 0;
+            });
+
+            // Store the newly fetched data in the cache
+            precipCache[cacheKey] = { timestamp: now, data: mappedPrecip };
         }
-
-        const mappedPrecip = timeHistory.map(t => {
-            const date = new Date(t);
-            // Round the sump timestamp down to the beginning of the hour
-            const hourTs = Math.floor(date.getTime() / 3600000) * 3600000;
-            return precipTimeMap.get(hourTs) ?? 0; // Default to 0 if no data
-        });
+        // --- END OF CACHING LOGIC ---
 
         if (sumpSinceRunChartInstance) {
             const precipDataset = sumpSinceRunChartInstance.data.datasets.find(d => d.label === "Precipitation (in)");
