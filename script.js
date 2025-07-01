@@ -236,8 +236,63 @@ document.addEventListener('DOMContentLoaded', () => {
     sumpTempChartInstance = createChart('sumpTempChart', 'Basement Temperature (°F)', 'rgb(255, 206, 86)');
     sumpPowerChartInstance = createChart('sumpPowerChart', 'External Power (V)', 'rgb(153, 102, 255)', 'Voltage (V)');
     sumpRuntimeChartInstance = createChart('sumpRuntimeChart', 'Sump Runtime (sec)', 'rgb(255, 159, 64)', 'Runtime (seconds)');
-    sumpSinceRunChartInstance = createChart('sumpSinceRunChart', 'Time Since Last Cycle (min)', 'rgb(201, 203, 207)', 'Minutes');
-    //console.log("DEBUG: Charts initialization attempted.");
+
+    const sumpSinceRunCtx = document.getElementById('sumpSinceRunChart').getContext('2d');
+    sumpSinceRunChartInstance = new Chart(sumpSinceRunCtx, {
+        type: 'line', // The base type is line
+        data: {
+            labels: [], // Populated later
+            datasets: [{
+                label: 'Time Since Last Cycle (min)',
+                data: [],
+                borderColor: 'rgb(201, 203, 207)',
+                yAxisID: 'y_minutes', // Assign to the left axis
+                tension: 0.1,
+                pointRadius: 0,
+            }, {
+                label: 'Precipitation (in)',
+                data: [],
+                backgroundColor: 'rgba(54, 162, 235, 0.5)', // Blue for rain
+                borderColor: 'rgba(54, 162, 235, 1)',
+                yAxisID: 'y_precip', // Assign to the new right axis
+                type: 'bar', // Display precipitation as bars
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    type: 'time',
+                },
+                y_minutes: { // Configuration for the left Y-axis (Minutes)
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Minutes'
+                    }
+                },
+                y_precip: { // Configuration for the new right Y-axis (Precipitation)
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Precipitation (in)'
+                    },
+                    grid: {
+                        drawOnChartArea: false, // Only draw grid for the left axis
+                    },
+                    ticks: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        }
+    });
+  
     // ======================= INITIALIZE THE RunsPerDay CHART =======================
     sumpRunsPerDayChartInstance = createChart('sumpRunsPerDayChart', 'Total Cycles', 'rgb(129, 201, 149)', 'Number of Runs');
 if (sumpRunsPerDayChartInstance) {
@@ -519,6 +574,7 @@ function fetchSumpHistoricalData(rangeHours) {
                 sumpSinceRunChartInstance.data.datasets[0].data = sumpSinceRunHistory;
                 sumpSinceRunChartInstance.update();
             }
+        fetchSumpPrecipitation(sumpTimeHistory, rangeHours);
         })
         .catch(error => {
             console.error("DEBUG: Failed to fetch sump history:", error);
@@ -752,6 +808,63 @@ async function fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours) {
         }
     } catch (error) {
         console.error("DEBUG: Failed to fetch or process Visual Crossing data:", error);
+    }
+}
+
+async function fetchSumpPrecipitation(timeHistory, rangeHours) {
+    console.debug(`DEBUG: Fetching precipitation data for ${rangeHours} hours`);
+
+    if (!timeHistory || timeHistory.length === 0) {
+        return;
+    }
+    // Visual Crossing API requires at least 1 hour for historical queries
+    if (rangeHours < 1) { 
+        return;
+    }
+    
+    function formatVCDate(date) {
+        const d = new Date(date);
+        return d.toISOString().split('.')[0];
+    }
+
+    try {
+        const start = timeHistory[0];
+        const end = timeHistory[timeHistory.length - 1];
+        const startDateStr = formatVCDate(start);
+        const endDateStr = formatVCDate(end);
+        
+        const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${startDateStr}/${endDateStr}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
+        console.debug("DEBUG: Fetching Visual Crossing precipitation data:", url);
+
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const json = await res.json();
+
+        const hours = (json.days || []).flatMap(day => day.hours || []);
+        const precipTimeMap = new Map();
+
+        for (const hour of hours) {
+            const ts = new Date(hour.datetimeEpoch * 1000).getTime();
+            precipTimeMap.set(ts, hour.precip);
+        }
+
+        const mappedPrecip = timeHistory.map(t => {
+            const date = new Date(t);
+            // Round the sump timestamp down to the beginning of the hour
+            const hourTs = Math.floor(date.getTime() / 3600000) * 3600000;
+            return precipTimeMap.get(hourTs) ?? 0; // Default to 0 if no data
+        });
+
+        if (sumpSinceRunChartInstance) {
+            const precipDataset = sumpSinceRunChartInstance.data.datasets.find(d => d.label === "Precipitation (in)");
+            if (precipDataset) {
+                precipDataset.data = mappedPrecip;
+                sumpSinceRunChartInstance.update();
+                console.debug(`DEBUG: Updated sump chart with ${mappedPrecip.filter(v => v > 0).length} precipitation data points.`);
+            }
+        }
+    } catch (error) {
+        console.error("DEBUG: Failed to fetch or process Visual Crossing precipitation data:", error);
     }
 }
 
