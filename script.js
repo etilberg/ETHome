@@ -27,8 +27,6 @@ let garageHistory = [];
 let heaterStatusHistory = [];
 let outdoorTempHistory = [];
 let garageOutdoorTemps = [];
-let precipCache = {};
-let outdoorTempCache = {}; 
 
 let sumpTimeHistory = [];
 let sumpTempHistory = [];
@@ -40,6 +38,13 @@ let sumpSinceRunHistory = [];
 let fridgeChartInstance, freezerChartInstance, garageChartInstance;
 let sumpTempChartInstance, sumpPowerChartInstance, sumpRuntimeChartInstance, sumpSinceRunChartInstance;
 let sumpRunsPerDayChartInstance; 
+
+// A single, unified cache for all weather station data
+let masterWeatherCache = {
+    data: new Map(), // Holds all hourly data: ts -> {temp, precip}
+    timestamp: 0     // Unix timestamp of the last successful fetch
+};
+const MASTER_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes in milliseconds
 
 function calculateMinMax(array) {
   if (!array.length) return { min: null, max: null };
@@ -333,22 +338,6 @@ document.getElementById('history-range').addEventListener('change', function() {
     fetchSumpHistoricalData(selectedHours);      // New function
 });
 
-/*// --- Event Listener for Reset Zoom Button ---
-document.getElementById('reset-zoom').addEventListener('click', resetZoomOnAllCharts);
-
-function resetZoomOnAllCharts() {
-    //console.log("DEBUG: Resetting zoom on all charts");
-    if (fridgeChartInstance) fridgeChartInstance.resetZoom();
-    if (freezerChartInstance) freezerChartInstance.resetZoom();
-    if (garageChartInstance) garageChartInstance.resetZoom();
-    if (sumpTempChartInstance) sumpTempChartInstance.resetZoom();
-    // sumpPowerChartInstance does not load historical data per request, so skip
-    if (sumpRuntimeChartInstance) sumpRuntimeChartInstance.resetZoom();
-    if (sumpSinceRunChartInstance) sumpSinceRunChartInstance.resetZoom();
-}
-*/
-// --- Fetch Historical Data for Temp Monitor ---
-// --- Fetch Historical Data for Temp Monitor ---
 function fetchTempMonitorHistoricalData(rangeHours = 1) {
     console.log(`DEBUG: Fetching Temp Monitor historical data for last ${rangeHours} hours.`);
 
@@ -484,9 +473,23 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
                 liveHeaterStatusElement.textContent = lastHeaterStatus === 1 ? "On" : "Off";
             }
             
-            if (timeHistory.length > 0) {
-                fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours);
-            }
+           if (timeHistory.length > 0) {
+                  getOrFetchMasterWeatherData().then(weatherData => {
+                      const mappedTemps = timeHistory.map(t => {
+                          const hourTs = Math.floor(new Date(t).getTime() / 3600000) * 3600000;
+                          // Get the temp property from the master data
+                          return weatherData.get(hourTs)?.temp ?? null;
+                      });
+  
+                      if (garageChartInstance) {
+                          const outdoorDataset = garageChartInstance.data.datasets.find(d => d.label === "Outdoor Temp (°F)");
+                          if (outdoorDataset) {
+                              outdoorDataset.data = mappedTemps;
+                              garageChartInstance.update();
+                          }
+                      }
+                  });
+              }
         })
         .catch(err => {
             console.error("DEBUG: Failed to fetch historical temp data:", err);
@@ -575,7 +578,21 @@ function fetchSumpHistoricalData(rangeHours) {
                 sumpSinceRunChartInstance.data.datasets[0].data = sumpSinceRunHistory;
                 sumpSinceRunChartInstance.update();
             }
-        fetchSumpPrecipitation(sumpTimeHistory, rangeHours);
+            getOrFetchMasterWeatherData().then(weatherData => {
+                const mappedPrecip = sumpTimeHistory.map(t => {
+                    const hourTs = Math.floor(new Date(t).getTime() / 3600000) * 3600000;
+                    // Get the precip property from the master data
+                    return weatherData.get(hourTs)?.precip ?? 0;
+                });
+
+                if (sumpSinceRunChartInstance) {
+                    const precipDataset = sumpSinceRunChartInstance.data.datasets.find(d => d.label === "Precipitation (in)");
+                    if (precipDataset) {
+                        precipDataset.data = mappedPrecip;
+                        sumpSinceRunChartInstance.update();
+                    }
+                }
+            });
         })
         .catch(error => {
             console.error("DEBUG: Failed to fetch sump history:", error);
@@ -730,156 +747,71 @@ function connectSumpMonitorSSE() {
         sumpMonitorStatusElement.style.color = 'red';
     };
 }
-
-async function fetchVisualCrossingOutdoorTemps(timeHistory, rangeHours) {
-    console.debug(`DEBUG: Fetching outdoor temps for ${rangeHours} hours`);
-
-    if (!timeHistory || timeHistory.length === 0 || rangeHours < 1) return;
-
-    try {
-        const outdoorTimeTempMap = new Map();
-        const dailyPromises = [];
-
-        const daysToFetch = new Set();
-        timeHistory.forEach(t => {
-            daysToFetch.add(new Date(t).toISOString().split('T')[0]);
-        });
-
-        for (const day of daysToFetch) {
-            const cacheKey = `vc_outdoor_${day}`;
-            const cached = outdoorTempCache[cacheKey];
-            const now = Date.now();
-
-            if (cached && (now - cached.timestamp < 15 * 60000)) {
-                console.debug(`DEBUG: Using cached outdoor temp data for ${day}.`);
-                const cachedData = new Map(cached.data);
-                cachedData.forEach((value, key) => outdoorTimeTempMap.set(key, value));
-            } else {
-                const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${day}/${day}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
-                console.debug("DEBUG: Fetching Visual Crossing weather data for day:", day);
-                
-                const promise = fetch(url)
-                    .then(res => {
-                        if (!res.ok) throw new Error(`HTTP error ${res.status} for day ${day}`);
-                        return res.json();
-                    })
-                    .then(json => {
-                        const hours = (json.days && json.days[0] && json.days[0].hours) || [];
-                        const dailyDataToCache = [];
-                        for (const hour of hours) {
-                            const ts = new Date(hour.datetimeEpoch * 1000).getTime();
-                            outdoorTimeTempMap.set(ts, hour.temp);
-                            dailyDataToCache.push([ts, hour.temp]);
-                        }
-                        outdoorTempCache[cacheKey] = { timestamp: now, data: dailyDataToCache };
-                    });
-                dailyPromises.push(promise);
-            }
-        }
-
-        // Use Promise.allSettled to wait for all promises, even if some fail.
-        const results = await Promise.allSettled(dailyPromises);
+/**
+ * The single function responsible for fetching 7 days of weather data from the API.
+ * This should only be called by the controller function below.
+ */
+async function fetchMasterWeatherData() {
+    console.log("DEBUG: Fetching 7-day master weather data from Visual Crossing API.");
+    const weatherDataMap = new Map();
+    const dailyPromises = [];
+    
+    // Create a list of the last 7 days to fetch
+    for (let i = 0; i < 7; i++) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dayString = date.toISOString().split('T')[0];
         
-        // Log any individual failures for debugging, but don't stop the process.
-        results.forEach(result => {
-            if (result.status === 'rejected') {
-                console.error("DEBUG: A daily outdoor temp fetch failed:", result.reason);
-            }
-        });
-
-        // Continue to process whatever data was successfully fetched.
-        const mappedTemps = timeHistory.map(t => {
-            const hourTs = Math.floor(new Date(t).getTime() / 3600000) * 3600000;
-            return outdoorTimeTempMap.get(hourTs) ?? null;
-        });
-
-        if (garageChartInstance) {
-            const outdoorDataset = garageChartInstance.data.datasets.find(d => d.label === "Outdoor Temp (°F)");
-            if (outdoorDataset) {
-                outdoorDataset.data = mappedTemps;
-                garageChartInstance.data.labels = timeHistory;
-                garageChartInstance.update();
-                console.debug(`DEBUG: Updated garage chart with ${mappedTemps.filter(v => v !== null).length} outdoor temp points.`);
-            }
-        }
-    } catch (error) {
-        console.error("DEBUG: Failed to fetch or process Visual Crossing data:", error);
+        const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${dayString}/${dayString}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
+        
+        const promise = fetch(url)
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP error ${res.status} for day ${dayString}`);
+                return res.json();
+            })
+            .then(json => {
+                const hours = (json.days && json.days[0] && json.days[0].hours) || [];
+                for (const hour of hours) {
+                    const ts = new Date(hour.datetimeEpoch * 1000).getTime();
+                    // Store both temp and precip in the same object
+                    weatherDataMap.set(ts, { temp: hour.temp, precip: hour.precip });
+                }
+            });
+        dailyPromises.push(promise);
     }
+
+    const results = await Promise.allSettled(dailyPromises);
+    results.forEach(result => {
+        if (result.status === 'rejected') {
+            console.error("DEBUG: A daily fetch for the master weather cache failed:", result.reason);
+        }
+    });
+
+    return weatherDataMap;
 }
 
-async function fetchSumpPrecipitation(timeHistory, rangeHours) {
-    console.debug(`DEBUG: Fetching precipitation data for ${rangeHours} hours`);
-
-    if (!timeHistory || timeHistory.length === 0 || rangeHours < 1) return;
-
-    try {
-        const precipTimeMap = new Map();
-        const dailyPromises = [];
-        
-        const daysToFetch = new Set();
-        timeHistory.forEach(t => {
-            daysToFetch.add(new Date(t).toISOString().split('T')[0]);
-        });
-
-        for (const day of daysToFetch) {
-            const cacheKey = `vc_precip_${day}`;
-            const cached = precipCache[cacheKey];
-            const now = Date.now();
-
-            if (cached && (now - cached.timestamp < 15 * 60000)) {
-                console.debug(`DEBUG: Using cached precipitation data for ${day}.`);
-                const cachedData = new Map(cached.data);
-                cachedData.forEach((value, key) => precipTimeMap.set(key, value));
-            } else {
-                const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${day}/${day}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
-                console.debug("DEBUG: Fetching Visual Crossing precipitation data for day:", day);
-                
-                const promise = fetch(url)
-                    .then(res => {
-                        if (!res.ok) throw new Error(`HTTP error ${res.status} for day ${day}`);
-                        return res.json();
-                    })
-                    .then(json => {
-                        const hours = (json.days && json.days[0] && json.days[0].hours) || [];
-                        const dailyDataToCache = [];
-                        for (const hour of hours) {
-                            const ts = new Date(hour.datetimeEpoch * 1000).getTime();
-                            precipTimeMap.set(ts, hour.precip);
-                            dailyDataToCache.push([ts, hour.precip]);
-                        }
-                        precipCache[cacheKey] = { timestamp: now, data: dailyDataToCache };
-                    });
-                dailyPromises.push(promise);
-            }
-        }
-
-        // Use Promise.allSettled to wait for all promises, even if some fail.
-        const results = await Promise.allSettled(dailyPromises);
-
-        // Log any individual failures for debugging, but don't stop the process.
-        results.forEach(result => {
-            if (result.status === 'rejected') {
-                console.error("DEBUG: A daily precipitation fetch failed:", result.reason);
-            }
-        });
-
-        // Continue to process whatever data was successfully fetched.
-        const mappedPrecip = timeHistory.map(t => {
-            const hourTs = Math.floor(new Date(t).getTime() / 3600000) * 3600000;
-            return precipTimeMap.get(hourTs) ?? 0;
-        });
-
-        if (sumpSinceRunChartInstance) {
-            const precipDataset = sumpSinceRunChartInstance.data.datasets.find(d => d.label === "Precipitation (in)");
-            if (precipDataset) {
-                precipDataset.data = mappedPrecip;
-                sumpSinceRunChartInstance.update();
-                console.debug(`DEBUG: Updated sump chart with ${mappedPrecip.filter(v => v > 0).length} precipitation data points.`);
-            }
-        }
-    } catch (error) {
-        console.error("DEBUG: Failed to fetch or process Visual Crossing precipitation data:", error);
+/**
+ * Controller function that decides whether to return cached data or fetch new data.
+ * All chart functions should call this to get weather data.
+ */
+async function getOrFetchMasterWeatherData() {
+    const now = Date.now();
+    if (now - masterWeatherCache.timestamp < MASTER_CACHE_DURATION && masterWeatherCache.data.size > 0) {
+        console.log("DEBUG: Using master weather cache (valid for 30 mins).");
+        return masterWeatherCache.data;
     }
+    
+    console.log("DEBUG: Master weather cache is stale or empty. Triggering new fetch.");
+    const newWeatherData = await fetchMasterWeatherData();
+    
+    if (newWeatherData.size > 0) {
+        masterWeatherCache.data = newWeatherData;
+        masterWeatherCache.timestamp = Date.now();
+    } else {
+        console.error("DEBUG: Master weather fetch returned no data. Cache not updated.");
+    }
+    
+    return masterWeatherCache.data;
 }
 
 function applyOutdoorTemps(hourlyTemps) {
