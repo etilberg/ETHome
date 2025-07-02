@@ -580,9 +580,17 @@ function fetchSumpHistoricalData(rangeHours) {
             }
             getOrFetchMasterWeatherData().then(weatherData => {
                 const mappedPrecip = sumpTimeHistory.map(t => {
-                    const hourTs = Math.floor(new Date(t).getTime() / 3600000) * 3600000;
-                    // Get the precip property from the master data
-                    return weatherData.get(hourTs)?.precip ?? 0;
+                  const ts = new Date(t).getTime();
+                  const hourAligned = Math.floor(ts / 3600000) * 3600000;
+                
+                  // Try exact match first
+                  let data = weatherData.get(hourAligned);
+                
+                  // If not found, try nearby hours (±1h)
+                  if (!data) data = weatherData.get(hourAligned - 3600000);
+                  if (!data) data = weatherData.get(hourAligned + 3600000);
+                
+                  return data?.precip ?? 0;
                 });
 
                 if (sumpSinceRunChartInstance) {
@@ -591,6 +599,7 @@ function fetchSumpHistoricalData(rangeHours) {
                         precipDataset.data = mappedPrecip;
                         sumpSinceRunChartInstance.update();
                     }
+                    console.log("DEBUG: Setting precipitation data:", mappedPrecip.length, "points");
                 }
             });
         })
