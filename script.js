@@ -517,14 +517,10 @@ function fetchSumpHistoricalData(rangeHours) {
             }
 
             const header = lines.shift().split(',');
-           // console.log("DEBUG: Sump CSV Header:", header);
-
-            // Flexible column detection
-            const tsIdx       = header.findIndex(h => h.toLowerCase().includes('timestamp'));
-            const runtimeIdx  = header.findIndex(h => h.toLowerCase().includes('sumpruntime'));
+            const tsIdx = header.findIndex(h => h.toLowerCase().includes('timestamp'));
+            const runtimeIdx = header.findIndex(h => h.toLowerCase().includes('sumpruntime'));
             const sinceRunIdx = header.findIndex(h => h.toLowerCase().includes('timesince'));
-            const tempIdx     = header.findIndex(h => h.toLowerCase().includes('temp'));
-            const powerIdx    = -1; // Not present in this CSV
+            const tempIdx = header.findIndex(h => h.toLowerCase().includes('temp'));
 
             if ([tsIdx, runtimeIdx, sinceRunIdx, tempIdx].some(i => i === -1)) {
               console.error("DEBUG: Could not find one or more required Sump columns in header:", header);
@@ -539,11 +535,9 @@ function fetchSumpHistoricalData(rangeHours) {
             sumpSinceRunHistory.length = 0;
 
             const now = new Date();
-
             lines.forEach(line => {
                 const cols = line.split(',');
                 const ts = new Date(cols[tsIdx]);
-
                 if (isNaN(ts.getTime())) return;
 
                 const diffHours = (now - ts) / (1000 * 60 * 60);
@@ -557,49 +551,38 @@ function fetchSumpHistoricalData(rangeHours) {
 
             console.log(`DEBUG: Loaded ${sumpTimeHistory.length} sump points.`);
 
-            // Update charts
+            // --- CONSOLIDATED CHART UPDATE LOGIC ---
+            // First, update the charts that DON'T need weather data.
             if (sumpTempChartInstance) {
                 sumpTempChartInstance.data.labels = sumpTimeHistory;
                 sumpTempChartInstance.data.datasets[0].data = sumpTempHistory;
                 sumpTempChartInstance.update();
-            }
-            if (sumpPowerChartInstance) {
-                sumpPowerChartInstance.data.labels = sumpTimeHistory;
-                sumpPowerChartInstance.data.datasets[0].data = sumpPowerHistory;
-                sumpPowerChartInstance.update();
             }
             if (sumpRuntimeChartInstance) {
                 sumpRuntimeChartInstance.data.labels = sumpTimeHistory;
                 sumpRuntimeChartInstance.data.datasets[0].data = sumpRuntimeHistory;
                 sumpRuntimeChartInstance.update();
             }
-            if (sumpSinceRunChartInstance) {
-                sumpSinceRunChartInstance.data.labels = sumpTimeHistory;
-                sumpSinceRunChartInstance.data.datasets[0].data = sumpSinceRunHistory;
-                sumpSinceRunChartInstance.update();
+             if (sumpPowerChartInstance) {
+                sumpPowerChartInstance.data.labels = sumpTimeHistory;
+                sumpPowerChartInstance.data.datasets[0].data = sumpPowerHistory;
+                sumpPowerChartInstance.update();
             }
+
+            // For the chart that needs weather data, get it first.
             getOrFetchMasterWeatherData().then(weatherData => {
+                // Now that we have weather data, map the precipitation values.
                 const mappedPrecip = sumpTimeHistory.map(t => {
-                  const ts = new Date(t).getTime();
-                  const hourAligned = Math.floor(ts / 3600000) * 3600000;
-                
-                  // Try exact match first
-                  let data = weatherData.get(hourAligned);
-                
-                  // If not found, try nearby hours (±1h)
-                  if (!data) data = weatherData.get(hourAligned - 3600000);
-                  if (!data) data = weatherData.get(hourAligned + 3600000);
-                
-                  return data?.precip ?? 0;
+                    const hourTs = Math.floor(new Date(t).getTime() / 3600000) * 3600000;
+                    return weatherData.get(hourTs)?.precip ?? 0;
                 });
 
+                // THEN, update the combined chart with all data at once.
                 if (sumpSinceRunChartInstance) {
-                    const precipDataset = sumpSinceRunChartInstance.data.datasets.find(d => d.label === "Precipitation (in)");
-                    if (precipDataset) {
-                        precipDataset.data = mappedPrecip;
-                        sumpSinceRunChartInstance.update();
-                    }
-                    console.log("DEBUG: Setting precipitation data:", mappedPrecip.length, "points");
+                    sumpSinceRunChartInstance.data.labels = sumpTimeHistory;
+                    sumpSinceRunChartInstance.data.datasets[0].data = sumpSinceRunHistory; // Sump data
+                    sumpSinceRunChart-Instance.data.datasets[1].data = mappedPrecip;      // Precip data
+                    sumpSinceRunChartInstance.update(); // Update ONCE
                 }
             });
         })
@@ -607,7 +590,6 @@ function fetchSumpHistoricalData(rangeHours) {
             console.error("DEBUG: Failed to fetch sump history:", error);
         });
 }
-
 
 // --- Function to Connect to Temp Monitor SSE ---
 function connectTempMonitorSSE() {
