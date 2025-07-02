@@ -44,7 +44,7 @@ let masterWeatherCache = {
     data: new Map(), // Holds all hourly data: ts -> {temp, precip}
     timestamp: 0     // Unix timestamp of the last successful fetch
 };
-const MASTER_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes in milliseconds
+const MASTER_CACHE_DURATION = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
 
 function calculateMinMax(array) {
   if (!array.length) return { min: null, max: null };
