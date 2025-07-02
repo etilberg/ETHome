@@ -581,7 +581,8 @@ function fetchSumpHistoricalData(rangeHours) {
                 if (sumpSinceRunChartInstance) {
                     sumpSinceRunChartInstance.data.labels = sumpTimeHistory;
                     sumpSinceRunChartInstance.data.datasets[0].data = sumpSinceRunHistory; // Sump data
-                    sumpSinceRunChart-Instance.data.datasets[1].data = mappedPrecip;      // Precip data
+                    // --- THIS LINE IS NOW FIXED ---
+                    sumpSinceRunChartInstance.data.datasets[1].data = mappedPrecip;      // Precip data
                     sumpSinceRunChartInstance.update(); // Update ONCE
                 }
             });
