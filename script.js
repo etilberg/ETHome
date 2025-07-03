@@ -221,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     freezerChartInstance = createChart('freezerChart', 'Freezer Temp (°F)', 'rgb(54, 162, 235)');
     garageChartInstance = createChart('garageChart', 'Garage Temp (°F)', 'rgb(75, 192, 192)');
-    // --- THIS IS THE CORRECTED LOGIC ---
+
     // First, check if the garage chart was created successfully
     if (garageChartInstance) {
         // Then, push the new dataset to THAT specific chart instance
@@ -323,7 +323,7 @@ if (sumpRunsPerDayChartInstance) {
     // Load initial historical data based on default dropdown selection
     const initialHours = parseInt(document.getElementById('history-range').value, 10);
     fetchTempMonitorHistoricalData(initialHours);
-    (initialHours);
+    fetchSumpHistoricalData(initialHours); 
     
     // ======================= CALL THE NEW ANALYTICS FETCH =======================
     fetchSumpAnalyticsData();
@@ -335,7 +335,7 @@ if (sumpRunsPerDayChartInstance) {
 document.getElementById('history-range').addEventListener('change', function() {
     const selectedHours = parseInt(this.value, 10);
     fetchTempMonitorHistoricalData(selectedHours); // Renamed function
-    (selectedHours);      // New function
+    fetchSumpHistoricalData(selectedHours);      // New function
 });
 
 function fetchTempMonitorHistoricalData(rangeHours = 1) {
