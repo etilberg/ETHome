@@ -540,6 +540,7 @@ function fetchSumpHistoricalData(rangeHours) {
                 const cols = line.split(',');
                 const ts = new Date(cols[tsIdx]);
                 if (isNaN(ts.getTime())) return;
+
                 const diffHours = (now - ts) / (1000 * 60 * 60);
                 if (diffHours > rangeHours) return;
 
@@ -562,49 +563,50 @@ function fetchSumpHistoricalData(rangeHours) {
                 sumpRuntimeChartInstance.data.datasets[0].data = sumpRuntimeHistory;
                 sumpRuntimeChartInstance.update();
             }
-             if (sumpPowerChartInstance) {
+            if (sumpPowerChartInstance) {
                 sumpPowerChartInstance.data.labels = sumpTimeHistory;
                 sumpPowerChartInstance.data.datasets[0].data = sumpPowerHistory;
                 sumpPowerChartInstance.update();
             }
 
-            // --- NEW HOURLY AGGREGATION LOGIC ---
+            // --- CORRECTED HOURLY AGGREGATION LOGIC ---
             getOrFetchMasterWeatherData().then(weatherData => {
                 if (sumpTimeHistory.length === 0) return;
 
-                // 1. Create hourly data bins using a Map
                 const hourlyBins = new Map();
                 const getHour = (ts) => Math.floor(new Date(ts).getTime() / 3600000) * 3600000;
+                
+                // 1. Create hourly bins for the ENTIRE time range first
+                const startTime = getHour(sumpTimeHistory[0]);
+                const endTime = getHour(sumpTimeHistory[sumpTimeHistory.length - 1]);
 
-                // 2. Bin the sump data into hours
-                for (let i = 0; i < sumpTimeHistory.length; i++) {
-                    const hourKey = getHour(sumpTimeHistory[i]);
-                    if (!hourlyBins.has(hourKey)) {
-                        // Initialize a new bin for this hour
-                        hourlyBins.set(hourKey, { sinceRunValues: [], precip: 0 });
-                    }
-                    // Add the sump value to this hour's bin
-                    hourlyBins.get(hourKey).sinceRunValues.push(sumpSinceRunHistory[i]);
+                for (let currentHour = startTime; currentHour <= endTime; currentHour += 3600000) {
+                    // Initialize the bin with precipitation data from the master cache
+                    hourlyBins.set(currentHour, {
+                        sinceRunValues: [],
+                        precip: weatherData.get(currentHour)?.precip ?? 0
+                    });
                 }
                 
-                // 3. Add precipitation data to the bins from the master weather cache
-                for (const hourKey of hourlyBins.keys()) {
-                    const bin = hourlyBins.get(hourKey);
-                    bin.precip = weatherData.get(hourKey)?.precip ?? 0;
+                // 2. Now, add the sump data into the appropriate, existing bins
+                for (let i = 0; i < sumpTimeHistory.length; i++) {
+                    const hourKey = getHour(sumpTimeHistory[i]);
+                    if (hourlyBins.has(hourKey)) {
+                        hourlyBins.get(hourKey).sinceRunValues.push(sumpSinceRunHistory[i]);
+                    }
                 }
-
-                // 4. Sort the bins by time and create the final chart arrays
+                
+                // 3. Sort the bins and create final chart arrays
                 const sortedKeys = Array.from(hourlyBins.keys()).sort((a, b) => a - b);
                 
                 const hourlyLabels = sortedKeys.map(key => new Date(key));
                 const hourlySumpData = sortedKeys.map(key => {
                     const values = hourlyBins.get(key).sinceRunValues;
-                    // Use the last sump value recorded in that hour, or null for a gap
                     return values.length > 0 ? values[values.length - 1] : null;
                 });
                 const hourlyPrecipData = sortedKeys.map(key => hourlyBins.get(key).precip);
 
-                // 5. Update the chart with the new aggregated data
+                // 4. Update the chart with the correctly aggregated data
                 if (sumpSinceRunChartInstance) {
                     sumpSinceRunChartInstance.data.labels = hourlyLabels;
                     sumpSinceRunChartInstance.data.datasets[0].data = hourlySumpData;
