@@ -323,7 +323,7 @@ if (sumpRunsPerDayChartInstance) {
     // Load initial historical data based on default dropdown selection
     const initialHours = parseInt(document.getElementById('history-range').value, 10);
     fetchTempMonitorHistoricalData(initialHours);
-    fetchSumpHistoricalData(initialHours);
+    (initialHours);
     
     // ======================= CALL THE NEW ANALYTICS FETCH =======================
     fetchSumpAnalyticsData();
@@ -335,7 +335,7 @@ if (sumpRunsPerDayChartInstance) {
 document.getElementById('history-range').addEventListener('change', function() {
     const selectedHours = parseInt(this.value, 10);
     fetchTempMonitorHistoricalData(selectedHours); // Renamed function
-    fetchSumpHistoricalData(selectedHours);      // New function
+    (selectedHours);      // New function
 });
 
 function fetchTempMonitorHistoricalData(rangeHours = 1) {
@@ -495,6 +495,7 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
             console.error("DEBUG: Failed to fetch historical temp data:", err);
         });
 }
+
 // --- Fetch Historical Data for Sump Pump ---
 function fetchSumpHistoricalData(rangeHours) {
     console.log(`DEBUG: Fetching Sump Pump historical data for last ${rangeHours} hours.`);
@@ -539,7 +540,6 @@ function fetchSumpHistoricalData(rangeHours) {
                 const cols = line.split(',');
                 const ts = new Date(cols[tsIdx]);
                 if (isNaN(ts.getTime())) return;
-
                 const diffHours = (now - ts) / (1000 * 60 * 60);
                 if (diffHours > rangeHours) return;
 
@@ -551,7 +551,6 @@ function fetchSumpHistoricalData(rangeHours) {
 
             console.log(`DEBUG: Loaded ${sumpTimeHistory.length} sump points.`);
 
-            // --- CONSOLIDATED CHART UPDATE LOGIC ---
             // First, update the charts that DON'T need weather data.
             if (sumpTempChartInstance) {
                 sumpTempChartInstance.data.labels = sumpTimeHistory;
@@ -569,21 +568,48 @@ function fetchSumpHistoricalData(rangeHours) {
                 sumpPowerChartInstance.update();
             }
 
-            // For the chart that needs weather data, get it first.
+            // --- NEW HOURLY AGGREGATION LOGIC ---
             getOrFetchMasterWeatherData().then(weatherData => {
-                // Now that we have weather data, map the precipitation values.
-                const mappedPrecip = sumpTimeHistory.map(t => {
-                    const hourTs = Math.floor(new Date(t).getTime() / 3600000) * 3600000;
-                    return weatherData.get(hourTs)?.precip ?? 0;
-                });
+                if (sumpTimeHistory.length === 0) return;
 
-                // THEN, update the combined chart with all data at once.
+                // 1. Create hourly data bins using a Map
+                const hourlyBins = new Map();
+                const getHour = (ts) => Math.floor(new Date(ts).getTime() / 3600000) * 3600000;
+
+                // 2. Bin the sump data into hours
+                for (let i = 0; i < sumpTimeHistory.length; i++) {
+                    const hourKey = getHour(sumpTimeHistory[i]);
+                    if (!hourlyBins.has(hourKey)) {
+                        // Initialize a new bin for this hour
+                        hourlyBins.set(hourKey, { sinceRunValues: [], precip: 0 });
+                    }
+                    // Add the sump value to this hour's bin
+                    hourlyBins.get(hourKey).sinceRunValues.push(sumpSinceRunHistory[i]);
+                }
+                
+                // 3. Add precipitation data to the bins from the master weather cache
+                for (const hourKey of hourlyBins.keys()) {
+                    const bin = hourlyBins.get(hourKey);
+                    bin.precip = weatherData.get(hourKey)?.precip ?? 0;
+                }
+
+                // 4. Sort the bins by time and create the final chart arrays
+                const sortedKeys = Array.from(hourlyBins.keys()).sort((a, b) => a - b);
+                
+                const hourlyLabels = sortedKeys.map(key => new Date(key));
+                const hourlySumpData = sortedKeys.map(key => {
+                    const values = hourlyBins.get(key).sinceRunValues;
+                    // Use the last sump value recorded in that hour, or null for a gap
+                    return values.length > 0 ? values[values.length - 1] : null;
+                });
+                const hourlyPrecipData = sortedKeys.map(key => hourlyBins.get(key).precip);
+
+                // 5. Update the chart with the new aggregated data
                 if (sumpSinceRunChartInstance) {
-                    sumpSinceRunChartInstance.data.labels = sumpTimeHistory;
-                    sumpSinceRunChartInstance.data.datasets[0].data = sumpSinceRunHistory; // Sump data
-                    // --- THIS LINE IS NOW FIXED ---
-                    sumpSinceRunChartInstance.data.datasets[1].data = mappedPrecip;      // Precip data
-                    sumpSinceRunChartInstance.update(); // Update ONCE
+                    sumpSinceRunChartInstance.data.labels = hourlyLabels;
+                    sumpSinceRunChartInstance.data.datasets[0].data = hourlySumpData;
+                    sumpSinceRunChartInstance.data.datasets[1].data = hourlyPrecipData;
+                    sumpSinceRunChartInstance.update();
                 }
             });
         })
