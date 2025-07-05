@@ -1027,7 +1027,10 @@ function updateFridgeButton(isEnabled) {
 }
 
 async function toggleFridgeHeater() {
-  const action = fridgeButton.textContent.includes("OFF") ? "off" : "on";
+  // --- THIS LINE IS THE FIX ---
+  // If the button text includes "Enable", the action is "on". Otherwise, it's "off".
+  const action = fridgeButton.textContent.includes("Enable") ? "on" : "off";
+
   try {
     const resp = await fetch(`https://api.particle.io/v1/devices/${FRIDGE_DEVICE_ID}/${FRIDGE_HEATER_FUNCTION_NAME}`, {
       method: "POST",
@@ -1038,7 +1041,11 @@ async function toggleFridgeHeater() {
     });
     const data = await resp.json();
     if (data && data.return_value !== undefined) {
+      // After a successful command, re-fetch the state to update the button.
       fetchFridgeHeaterState();
+    } else {
+      console.error("Error or invalid response from function call:", data);
+      alert("Error sending command to device.");
     }
   } catch (error) {
     console.error("Error toggling Fridge Heater:", error);
