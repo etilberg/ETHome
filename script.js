@@ -875,7 +875,65 @@ function applyOutdoorTemps(hourlyTemps) {
  * Processes raw sump data to calculate runs per day and updates the bar chart.
  * @param {Array} sumpData - An array of objects with { ts, sinceRun } properties.
  */
+/**
+ * Processes raw sump data to calculate runs per day and updates the bar chart.
+ * @param {Array} sumpData - An array of objects with { ts, sinceRun } properties.
+ */
 function processSumpAnalytics(sumpData) {
+    if (sumpData.length === 0) {
+        console.warn("DEBUG: No sump data to process for analytics.");
+        return;
+    }
+
+    // Sort data just in case it's not chronological
+    sumpData.sort((a, b) => a.ts - b.ts);
+
+    const runsByDay = new Map();
+    let totalRuns = 0;
+
+    // Loop through the data to identify "runs"
+    for (let i = 1; i < sumpData.length; i++) {
+        const previous = sumpData[i - 1];
+        const current = sumpData[i];
+
+        // A "run" is detected when the timeSinceRun value suddenly drops.
+        if (current.sinceRun < previous.sinceRun) {
+            
+            // --- THIS IS THE FIX ---
+            // Get the date based on the local timezone, not UTC.
+            const ts = current.ts; // The Date object
+            const year = ts.getFullYear();
+            const month = (ts.getMonth() + 1).toString().padStart(2, '0');
+            const dayOfMonth = ts.getDate().toString().padStart(2, '0');
+            const day = `${year}-${month}-${dayOfMonth}`;
+            // --- END OF FIX ---
+
+            const count = (runsByDay.get(day) || 0) + 1;
+            runsByDay.set(day, count);
+            totalRuns++;
+        }
+    }
+
+    console.log(`DEBUG: Processed ${totalRuns} total sump runs across ${runsByDay.size} days.`);
+
+    const labels = [...runsByDay.keys()];
+    const data = [...runsByDay.values()];
+
+    // Calculate the overall average
+    const avgRunsPerDay = runsByDay.size > 0 ? (totalRuns / runsByDay.size).toFixed(1) : 0;
+
+    if (sumpRunsPerDayChartInstance) {
+        sumpRunsPerDayChartInstance.data.labels = labels;
+        sumpRunsPerDayChartInstance.data.datasets[0].data = data;
+        // Update the chart title with the calculated average
+        sumpRunsPerDayChartInstance.options.plugins.title = {
+            display: true,
+            text: `Daily Sump Pump Cycle Count (Last 90 Days) Avg: ${avgRunsPerDay} per day`
+        };
+        sumpRunsPerDayChartInstance.update();
+    }
+}
+/*function processSumpAnalytics(sumpData) {
     if (sumpData.length === 0) {
         console.warn("DEBUG: No sump data to process for analytics.");
         return;
@@ -921,7 +979,7 @@ function processSumpAnalytics(sumpData) {
         sumpRunsPerDayChartInstance.update();
     }
 }
-
+*/
 /**
  * Fetches the full sump history CSV for the last 90 days and processes it.
  * This runs independently of the dropdown-controlled history fetches.
