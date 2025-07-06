@@ -820,19 +820,59 @@ async function fetchMasterWeatherData() {
  * Controller function that decides whether to return cached data or fetch new data.
  * All chart functions should call this to get weather data.
  */
+/**
+ * Controller function that decides whether to return cached data or fetch new data.
+ * It now checks three levels: localStorage, in-memory cache, and then fetches from the API.
+ */
 async function getOrFetchMasterWeatherData() {
     const now = Date.now();
+
+    // --- NEW: Step 1 - Check for a valid cache in localStorage ---
+    try {
+        const cachedItem = localStorage.getItem('masterWeatherCache');
+        if (cachedItem) {
+            const parsedCache = JSON.parse(cachedItem);
+            // Check if the localStorage cache is still valid (less than 30 mins old)
+            if (now - parsedCache.timestamp < MASTER_CACHE_DURATION) {
+                console.log("DEBUG: Using master weather cache from localStorage.");
+                // Restore the Map data structure from the stored array
+                masterWeatherCache.data = new Map(parsedCache.data);
+                masterWeatherCache.timestamp = parsedCache.timestamp;
+                return masterWeatherCache.data;
+            }
+        }
+    } catch (error) {
+        console.error("DEBUG: Could not read weather cache from localStorage.", error);
+    }
+
+    // --- Step 2 - Check the in-memory cache (for the current session) ---
     if (now - masterWeatherCache.timestamp < MASTER_CACHE_DURATION && masterWeatherCache.data.size > 0) {
-        console.log("DEBUG: Using master weather cache (valid for 30 mins).");
+        console.log("DEBUG: Using master weather cache (in-memory).");
         return masterWeatherCache.data;
     }
     
+    // --- Step 3 - Fetch new data if all caches are stale or empty ---
     console.log("DEBUG: Master weather cache is stale or empty. Triggering new fetch.");
     const newWeatherData = await fetchMasterWeatherData();
     
     if (newWeatherData.size > 0) {
+        // Update the in-memory cache
         masterWeatherCache.data = newWeatherData;
         masterWeatherCache.timestamp = Date.now();
+
+        // --- NEW: Step 4 - Save the newly fetched data to localStorage ---
+        try {
+            // Convert the Map to an array to make it compatible with JSON.stringify
+            const dataToStore = Array.from(masterWeatherCache.data.entries());
+            const cacheToSave = {
+                data: dataToStore,
+                timestamp: masterWeatherCache.timestamp
+            };
+            localStorage.setItem('masterWeatherCache', JSON.stringify(cacheToSave));
+            console.log("DEBUG: Saved new weather data to localStorage for future sessions.");
+        } catch (error) {
+            console.error("DEBUG: Could not save weather cache to localStorage.", error);
+        }
     } else {
         console.error("DEBUG: Master weather fetch returned no data. Cache not updated.");
     }
