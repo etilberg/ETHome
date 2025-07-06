@@ -873,11 +873,7 @@ function applyOutdoorTemps(hourlyTemps) {
 
 /**
  * Processes raw sump data to calculate runs per day and updates the bar chart.
- * @param {Array} sumpData - An array of objects with { ts, sinceRun } properties.
- */
-/**
- * Processes raw sump data to calculate runs per day and updates the bar chart.
- * @param {Array} sumpData - An array of objects with { ts, sinceRun } properties.
+ * @param {Array} sumpData - An array of objects with { ts, sinceRun, runTime } properties.
  */
 function processSumpAnalytics(sumpData) {
     if (sumpData.length === 0) {
@@ -885,39 +881,33 @@ function processSumpAnalytics(sumpData) {
         return;
     }
 
-    // Sort data just in case it's not chronological
-    sumpData.sort((a, b) => a.ts - b.ts);
-
     const runsByDay = new Map();
     let totalRuns = 0;
 
-    // Loop through the data to identify "runs"
-    for (let i = 1; i < sumpData.length; i++) {
-        const previous = sumpData[i - 1];
-        const current = sumpData[i];
-
-        // A "run" is detected when the timeSinceRun value suddenly drops.
-        if (current.sinceRun < previous.sinceRun) {
-            
-            // --- THIS IS THE FIX ---
-            // Get the date based on the local timezone, not UTC.
-            const ts = current.ts; // The Date object
+    // --- FIX: New, more reliable counting logic ---
+    // Iterate over all data points
+    for (const current of sumpData) {
+        // A "run" is now detected if the runTime for that event is greater than 0.
+        if (current.runTime > 0) {
+            // Get the date based on the local timezone
+            const ts = current.ts;
             const year = ts.getFullYear();
             const month = (ts.getMonth() + 1).toString().padStart(2, '0');
             const dayOfMonth = ts.getDate().toString().padStart(2, '0');
             const day = `${year}-${month}-${dayOfMonth}`;
-            // --- END OF FIX ---
 
             const count = (runsByDay.get(day) || 0) + 1;
             runsByDay.set(day, count);
             totalRuns++;
         }
     }
+    // --- END OF FIX ---
 
     console.log(`DEBUG: Processed ${totalRuns} total sump runs across ${runsByDay.size} days.`);
-
-    const labels = [...runsByDay.keys()];
-    const data = [...runsByDay.values()];
+    
+    // Sort the labels chronologically before displaying
+    const labels = [...runsByDay.keys()].sort();
+    const data = labels.map(day => runsByDay.get(day));
 
     // Calculate the overall average
     const avgRunsPerDay = runsByDay.size > 0 ? (totalRuns / runsByDay.size).toFixed(1) : 0;
@@ -925,7 +915,6 @@ function processSumpAnalytics(sumpData) {
     if (sumpRunsPerDayChartInstance) {
         sumpRunsPerDayChartInstance.data.labels = labels;
         sumpRunsPerDayChartInstance.data.datasets[0].data = data;
-        // Update the chart title with the calculated average
         sumpRunsPerDayChartInstance.options.plugins.title = {
             display: true,
             text: `Daily Sump Pump Cycle Count (Last 90 Days) Avg: ${avgRunsPerDay} per day`
@@ -933,53 +922,6 @@ function processSumpAnalytics(sumpData) {
         sumpRunsPerDayChartInstance.update();
     }
 }
-/*function processSumpAnalytics(sumpData) {
-    if (sumpData.length === 0) {
-        console.warn("DEBUG: No sump data to process for analytics.");
-        return;
-    }
-
-    // Sort data just in case it's not chronological
-    sumpData.sort((a, b) => a.ts - b.ts);
-
-    const runsByDay = new Map();
-    let totalRuns = 0;
-
-    // Loop through the data to identify "runs"
-    for (let i = 1; i < sumpData.length; i++) {
-        const previous = sumpData[i - 1];
-        const current = sumpData[i];
-
-        // A "run" is detected when the timeSinceRun value suddenly drops.
-        if (current.sinceRun < previous.sinceRun) {
-            // Get the date string (e.g., "2025-06-15") for the current run
-            const day = current.ts.toISOString().split('T')[0];
-            const count = (runsByDay.get(day) || 0) + 1;
-            runsByDay.set(day, count);
-            totalRuns++;
-        }
-    }
-
-    console.log(`DEBUG: Processed ${totalRuns} total sump runs across ${runsByDay.size} days.`);
-
-    const labels = [...runsByDay.keys()];
-    const data = [...runsByDay.values()];
-
-    // Calculate the overall average
-    const avgRunsPerDay = runsByDay.size > 0 ? (totalRuns / runsByDay.size).toFixed(1) : 0;
-
-    if (sumpRunsPerDayChartInstance) {
-        sumpRunsPerDayChartInstance.data.labels = labels;
-        sumpRunsPerDayChartInstance.data.datasets[0].data = data;
-        // Update the chart title with the calculated average
-        sumpRunsPerDayChartInstance.options.plugins.title = {
-            display: true,
-            text: `Daily Sump Pump Cycle Count (Last 90 Days) Avg: ${avgRunsPerDay} per day`
-        };
-        sumpRunsPerDayChartInstance.update();
-    }
-}
-*/
 /**
  * Fetches the full sump history CSV for the last 90 days and processes it.
  * This runs independently of the dropdown-controlled history fetches.
@@ -1004,9 +946,11 @@ function fetchSumpAnalyticsData() {
             const header = lines.shift().split(',');
             const tsIdx = header.findIndex(h => h.toLowerCase().includes('timestamp'));
             const sinceRunIdx = header.findIndex(h => h.toLowerCase().includes('timesince'));
+            // --- FIX: Also find the sumpRunTime column ---
+            const runtimeIdx = header.findIndex(h => h.toLowerCase().includes('sumpruntime'));
 
-            if (tsIdx === -1 || sinceRunIdx === -1) {
-                console.error("DEBUG: Analytics requires 'timestamp' and 'timeSinceRun' columns in sump CSV.");
+            if (tsIdx === -1 || sinceRunIdx === -1 || runtimeIdx === -1) {
+                console.error("DEBUG: Analytics requires 'timestamp', 'timeSinceRun', and 'sumpRunTime' columns in sump CSV.");
                 return;
             }
 
@@ -1022,7 +966,9 @@ function fetchSumpAnalyticsData() {
                 }
                 return {
                     ts: ts,
-                    sinceRun: parseFloat(cols[sinceRunIdx])
+                    sinceRun: parseFloat(cols[sinceRunIdx]),
+                    // --- FIX: Add runTime to the data object ---
+                    runTime: parseFloat(cols[runtimeIdx])
                 };
             }).filter(item => item !== null); // Remove null entries
 
