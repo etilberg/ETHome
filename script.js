@@ -1104,7 +1104,10 @@ const resetButton = document.getElementById("device-reset-button");
 const resetStatus = document.getElementById("device-reset-status");
 
 if (resetButton) {
+  console.log("✅ Reset button found and listener attached");
   resetButton.addEventListener("click", async function() {
+    console.log("🔘 Reset button clicked!");
+    
     if (!confirm("Are you sure you want to reset the Photon device?\n\nThis will:\n• Restart the device (~30 seconds)\n• Interrupt data collection briefly\n• Trigger automatic sensor reconnection if needed\n\nContinue?")) {
       return;
     }
@@ -1115,19 +1118,22 @@ if (resetButton) {
     resetStatus.style.color = "orange";
     
     try {
-      const resp = await fetch(`https://api.particle.io/v1/devices/${TEMP_MONITOR_DEVICE_ID}/reset`, {
+      console.log("Sending reset command to Photon...");
+      const resp = await fetch(`https://api.particle.io/v1/devices/${TEMP_MONITOR_DEVICE_ID}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
         },
-        body: `access_token=${TEMP_MONITOR_ACCESS_TOKEN}`
+        body: `access_token=${TEMP_MONITOR_ACCESS_TOKEN}&args=reset`
       });
       
       const data = await resp.json();
+      console.log("Response from Particle:", data);
       
-      if (data.ok) {
+      if (data.return_value !== undefined) {
         resetStatus.textContent = "✅ Reset command sent! Device will restart in ~10-15 seconds...";
         resetStatus.style.color = "green";
+        console.log("Reset successful!");
         
         // Re-enable button after 30 seconds
         setTimeout(() => {
