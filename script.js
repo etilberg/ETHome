@@ -1132,10 +1132,11 @@ if (resetButton) {
       const data = await resp.json();
       console.log("Response from Particle:", data);
       
-      if (resp.ok && data.return_value !== undefined) {
+      // Check if it's a timeout error (which is actually expected during reset)
+      if ((resp.ok && data.return_value !== undefined) || data.error === 'Timed out.') {
         resetStatus.textContent = "✅ Reset command sent! Device will restart in ~10-15 seconds...";
         resetStatus.style.color = "green";
-        console.log("Reset successful! Return value:", data.return_value);
+        console.log("Reset initiated successfully!");
         
         // Re-enable button after 30 seconds
         setTimeout(() => {
