@@ -1118,8 +1118,10 @@ if (resetButton) {
     resetStatus.style.color = "orange";
     
     try {
-      console.log("Sending reset command to Photon...");
-      const resp = await fetch(`https://api.particle.io/v1/devices/${TEMP_MONITOR_DEVICE_ID}`, {
+      console.log("Sending reset function call to Photon...");
+      
+      // Call the reset FUNCTION on the device
+      const resp = await fetch(`https://api.particle.io/v1/devices/${TEMP_MONITOR_DEVICE_ID}/reset`, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
@@ -1130,10 +1132,10 @@ if (resetButton) {
       const data = await resp.json();
       console.log("Response from Particle:", data);
       
-      if (data.return_value !== undefined) {
+      if (resp.ok && data.return_value !== undefined) {
         resetStatus.textContent = "✅ Reset command sent! Device will restart in ~10-15 seconds...";
         resetStatus.style.color = "green";
-        console.log("Reset successful!");
+        console.log("Reset successful! Return value:", data.return_value);
         
         // Re-enable button after 30 seconds
         setTimeout(() => {
@@ -1142,7 +1144,7 @@ if (resetButton) {
           resetStatus.textContent = "";
         }, 30000);
       } else {
-        throw new Error(data.error || "Unknown error from Particle Cloud");
+        throw new Error(data.error || "Unknown error from Particle Cloud: " + resp.status);
       }
     } catch (error) {
       console.error("Error resetting device:", error);
