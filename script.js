@@ -1098,3 +1098,53 @@ async function toggleFridgeHeater() {
 }
 // Init
 fetchFridgeHeaterState();
+
+// ===== DEVICE RESET FUNCTIONALITY (Options 1 & 3) =====
+const resetButton = document.getElementById("device-reset-button");
+const resetStatus = document.getElementById("device-reset-status");
+
+if (resetButton) {
+  resetButton.addEventListener("click", async function() {
+    if (!confirm("Are you sure you want to reset the Photon device?\n\nThis will:\n• Restart the device (~30 seconds)\n• Interrupt data collection briefly\n• Trigger automatic sensor reconnection if needed\n\nContinue?")) {
+      return;
+    }
+    
+    resetButton.disabled = true;
+    resetButton.textContent = "🔄 Resetting...";
+    resetStatus.textContent = "Reset in progress...";
+    resetStatus.style.color = "orange";
+    
+    try {
+      const resp = await fetch(`https://api.particle.io/v1/devices/${TEMP_MONITOR_DEVICE_ID}/reset`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: `access_token=${TEMP_MONITOR_ACCESS_TOKEN}`
+      });
+      
+      const data = await resp.json();
+      
+      if (data.ok) {
+        resetStatus.textContent = "✅ Reset command sent! Device will restart in ~10-15 seconds...";
+        resetStatus.style.color = "green";
+        
+        // Re-enable button after 30 seconds
+        setTimeout(() => {
+          resetButton.disabled = false;
+          resetButton.textContent = "🔄 Reset Photon Device";
+          resetStatus.textContent = "";
+        }, 30000);
+      } else {
+        throw new Error(data.error || "Unknown error from Particle Cloud");
+      }
+    } catch (error) {
+      console.error("Error resetting device:", error);
+      resetStatus.textContent = "❌ Error: " + error.message;
+      resetStatus.style.color = "red";
+      resetButton.disabled = false;
+      resetButton.textContent = "🔄 Reset Photon Device";
+    }
+  });
+}
+// ===== END DEVICE RESET FUNCTIONALITY =====
