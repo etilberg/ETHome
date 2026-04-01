@@ -90,6 +90,7 @@ double FridgeStopHeatingTemp =  36;
 double FreezerMinTempAlert = -20;
 double FreezerMaxTempAlert = 10;
 double Deadband = 3;
+double ReadTempFromSensor(uint8_t addr[8]); 
 
 uint32_t msSampleTime = 2500;
 uint32_t msPublishTime = 30000;
@@ -134,20 +135,9 @@ double temp_f[NumberTempSensors] = {NAN, NAN};
 
 MicroOLED oled;
 
-// Function to reconnect temperature sensors (Option 3)
-void ReconnectTempSensor() {
-    Serial.println("Attempting to reconnect temperature sensors...");
-    Particle.publish("pushbullet", "Freezer sensor stuck - Attempting reconnection...", PRIVATE);
+
     
-    ds18b20.resetsearch();
-    delay(100);
-    for (int i = 0; i < NumberTempSensors; i++) {
-        ds18b20.search(sensorAddresses[i]);
-    }
     
-    freezerReconnectAttempted = true;
-    Serial.println("Temperature sensors reconnection attempted");
-}
 
 // Having declared these variables, let's move on to the setup function.
 // The setup function is a standard part of any microcontroller program.
@@ -169,6 +159,7 @@ void setup()
     Particle.function("analogread", tinkerAnalogRead);
     Particle.function("analogwrite", tinkerAnalogWrite);
     Particle.function("setFridgeHeater", setFridgeHeaterHandler);
+    Particle.function("reset", handleResetCommand);
     
     //Particle.variable registers a variable, so its value can be retrieved from the cloud in the future.
     Particle.variable("GarageTemp", GarageTemp);
@@ -211,9 +202,26 @@ void setup()
     Particle.subscribe("hook-response/FridgeHeaterOn", heaterResponseHandler, MY_DEVICES);
     Particle.subscribe("hook-response/FridgeHeaterOff", heaterResponseHandler, MY_DEVICES);
     Particle.subscribe("hook-response/KasaLogin", handleLoginResponse, MY_DEVICES);
+	
 
 }
 
+void ReconnectTempSensor() 
+{
+		Serial.println("Attempting to reconnect temperature sensors...");
+		Particle.publish("pushbullet", "Freezer sensor stuck - Attempting reconnection...", PRIVATE);
+		
+		ds18b20.resetsearch();
+		delay(100);
+		for (int i = 0; i < NumberTempSensors; i++) {
+			ds18b20.search(sensorAddresses[i]);
+			}
+	
+	freezerReconnectAttempted = true;
+	Serial.println("Temperature sensors reconnection attempted");
+}
+
+// ===== END AUTO-DETECT =====
     // Next we have the loop function, the other essential part of a microcontroller program.
     // This routine gets repeated over and over, as quickly as possible and as many times as possible, after the setup function is called.
     // Note: Code that blocks for too long (like more than 5 seconds), can make weird things happen (like dropping the network connection).  
@@ -232,11 +240,9 @@ void loop()
     if (QuickRunTimer <= currentMillis)                                   //Run every x seconds when idle
     {
         QuickRunTimer = (currentMillis + QuickRunLength);
-        temp0F = GetTemp();                                    //Gets temp from Sensor 0
-        GarageTemp = temp_f[0];
-        FreezerTemp = temp_f[1];
-        FridgeTemp = temp_f[2];
-        
+        temp0F = GetTemp();                          // This now auto-detects internally          
+        GarageTemp = temp_f[0];                     //Gets temp from Sensor 0
+        // FreezerTemp and FridgeTemp are already set by GetTemp()
         // ===== FREEZER SENSOR WATCHDOG LOGIC (Options 1 & 3) =====
         if (!isnan(FreezerTemp)) {
             // Valid reading received - reset the watchdog
@@ -364,40 +370,74 @@ void loop()
 /*******************************************************************************
 *                        end of main loop
 *******************************************************************************/
-
+/*******************************************************************************
+* Function Name  : ReadTempFromSensor
+* Description    : Reads temperature from a specific sensor address
+* Input          : addr[8] - the sensor address
+* Output         : None.
+* Return         : Temperature in Fahrenheit as a double, or NAN if read fails
+*******************************************************************************/
+double ReadTempFromSensor(uint8_t addr[8])
+{
+    double _temp;
+    int i = 0;
+    
+    do {
+        _temp = ds18b20.convertToFahrenheit(ds18b20.getTemperature(addr));
+    } while (!ds18b20.crcCheck() && MaxRetryGetTemp > i++);
+    
+    if (i >= MaxRetryGetTemp) {
+        _temp = NAN;  // Set to NAN if we couldn't get a valid reading
+    }
+    
+    return _temp;
+}
 /*******************************************************************************
 * Function Name  : GetTemp
-* Description    : Reads the temperature from sensor
-* Input          : Definded at top
+* Description    : Reads the temperature from all sensors and auto-detects
+*                  which is the fridge and which is the freezer
+* Input          : Defined at top
 * Output         : None.
 * Return         : Temperature as double in an array starting at 0 up to NumberTempSensors
 *******************************************************************************/
-int GetTemp()
-{
+int GetTemp() {
     int addr;
-	for (int i = 0; i < NumberTempSensors; i++)
-	{
-		double temp = ReadTempFromSensor(sensorAddresses[i]);
-		if (!isnan(temp)) temp_f[i] = temp;
-	}
-	return 100;
-}
+    // Read all three sensors
+    for (int i = 0; i < NumberTempSensors; i++) {
+        double temp = ReadTempFromSensor(sensorAddresses[i]);
+        if (!isnan(temp)) temp_f[i] = temp;
+    }
     
-double ReadTempFromSensor(uint8_t addr[8])                      //This is where actual read from sensor happens
-{
-	double _temp;
-	int   i = 0;
-	do
-		{
-			_temp = ds18b20.convertToFahrenheit(ds18b20.getTemperature(addr));  //retrieves temp and converts it to Farenheit
-		}
-	while (!ds18b20.crcCheck() && MaxRetryGetTemp > i++);                        //try until good reading, up to Max
-	if (i >= MaxRetryGetTemp)                                                     //if it didn't hit max then print serial temp
-		{
-			_temp = NAN;                                                        //then set it to NAN (not a number)
-		}
-    return _temp; 
-}                //exit ReadTempFromSensor and return temps
+    // Auto-detect Fridge vs Freezer based on temperature values
+    // Freezer should always be colder than fridge
+    double temp1 = temp_f[1];
+    double temp2 = temp_f[2];
+    
+    if (!isnan(temp1) && !isnan(temp2)) {
+        // Both sensors valid - assign by temperature
+        if (temp1 < temp2) {
+            // temp1 is colder = freezer
+            FreezerTemp = temp1;
+            FridgeTemp = temp2;
+        } else {
+            // temp2 is colder = freezer
+            FreezerTemp = temp2;
+            FridgeTemp = temp1;
+        }
+    } 
+    else if (!isnan(temp1)) {
+        // Only temp1 is valid - assume it's fridge (warmer reading)
+        FridgeTemp = temp1;
+        FreezerTemp = NAN;
+    } 
+    else if (!isnan(temp2)) {
+        // Only temp2 is valid - assume it's fridge (warmer reading)
+        FridgeTemp = temp2;
+        FreezerTemp = NAN;
+    }
+    
+    return 100;
+}           //exit ReadTempFromSensor and return temps
 
 /*******************************************************************************
 * Function Name  : UpdateDisplay
@@ -592,6 +632,18 @@ int setFridgeHeaterHandler(String command) {
     }
 }
 
+
+// ===== MANUAL RESET HANDLER =====
+int handleResetCommand(String command) 
+{
+    Serial.println("Manual reset command received from dashboard!");
+    Particle.publish("pushbullet", "Manual device reset initiated from dashboard", PRIVATE);
+    delay(1000); // Give cloud time to publish
+    System.reset(); // Perform the reset
+    return 1;
+}
+    
+    
 /*******************************************************************************
 * Function Name  : heaterResponseHandler
 * Description    : Handles responses from the webhook for FridgeHeaterOn/Off
@@ -702,3 +754,4 @@ void handleLoginResponse(const char *event, const char *data)
             Serial.println("❌ Login succeeded but no token found.");
         }
     }
+
