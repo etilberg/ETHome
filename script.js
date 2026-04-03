@@ -262,6 +262,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 borderColor: 'rgba(54, 162, 235, 1)',
                 yAxisID: 'y_precip', // Assign to the new right axis
                 type: 'bar', // Display precipitation as bars
+                barPercentage: 0.9,  // ← Add this (0-1, higher = wider bars)
+                categoryPercentage: 1.0  // ← Add this (0-1, higher = wider bars)
             }]
         },
         options: {
