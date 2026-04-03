@@ -773,9 +773,9 @@ function connectSumpMonitorSSE() {
  */
 async function fetchMasterWeatherData() {
     console.log("DEBUG: Fetching 7-day master weather data from Visual Crossing API.");
-    const dailyPromises = [];
+    const weatherDataMap = new Map();
     
-    // Create a list of the last 7 days to fetch
+    // Fetch one day at a time with a delay between requests
     for (let i = 0; i < 7; i++) {
         const date = new Date();
         date.setDate(date.getDate() - i);
@@ -783,36 +783,26 @@ async function fetchMasterWeatherData() {
         
         const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${dayString}/${dayString}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
         
-        // The promise will now resolve with the raw hours array or throw an error
-        const promise = fetch(url)
-            .then(res => {
-                if (!res.ok) throw new Error(`HTTP error ${res.status} for day ${dayString}`);
-                return res.json();
-            })
-            .then(json => (json.days && json.days[0] && json.days[0].hours) || []); // Return the hours array
+        try {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP error ${res.status} for day ${dayString}`);
+            const json = await res.json();
+            const hours = (json.days && json.days[0] && json.days[0].hours) || [];
             
-        dailyPromises.push(promise);
-    }
-
-    const weatherDataMap = new Map();
-    // Wait for all promises to settle
-    const results = await Promise.allSettled(dailyPromises);
-
-    // Now, loop through the results and populate the map
-    for (const result of results) {
-        if (result.status === 'fulfilled') {
-            const hours = result.value; // This is the array of hours for a given day
             for (const hour of hours) {
                 const ts = new Date(hour.datetimeEpoch * 1000).getTime();
-                // Store both temp and precip in the same object
                 weatherDataMap.set(ts, { temp: hour.temp, precip: hour.precip });
             }
-        } else {
-            // Log if any of the daily fetches failed
-            console.error("DEBUG: A daily fetch for the master weather cache failed:", result.reason);
+        } catch (error) {
+            console.error("DEBUG: A daily fetch for the master weather cache failed:", error);
+        }
+        
+        // Add a 500ms delay between requests to respect rate limits
+        if (i < 6) {
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
     }
-
+    
     return weatherDataMap;
 }
 
