@@ -34,6 +34,12 @@ let sumpPowerHistory = [];
 let sumpRuntimeHistory = [];
 let sumpSinceRunHistory = [];
 
+// Tracks the currently-selected history-range dropdown value so the periodic
+// sump chart refresh (see SUMP_CHART_REFRESH_INTERVAL_MS) re-fetches the same range.
+let currentSumpRangeHours = 4;
+// How often to rebuild the sump charts from source data instead of live-appending.
+const SUMP_CHART_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
 // --- Chart Instance Variables ---
 let fridgeChartInstance, freezerChartInstance, garageChartInstance;
 let sumpTempChartInstance, sumpPowerChartInstance, sumpRuntimeChartInstance, sumpSinceRunChartInstance;
@@ -324,11 +330,19 @@ if (sumpRunsPerDayChartInstance) {
 
     // Load initial historical data based on default dropdown selection
     const initialHours = parseInt(document.getElementById('history-range').value, 10);
+    currentSumpRangeHours = initialHours;
     fetchTempMonitorHistoricalData(initialHours);
     fetchSumpHistoricalData(initialHours); 
     
     // ======================= CALL THE NEW ANALYTICS FETCH =======================
     fetchSumpAnalyticsData();
+
+    // Periodically rebuild the sump charts from source data (CSV history) so
+    // they pick up new readings without live-appending raw points on top of
+    // aggregated bins. Runs on a timer independent of the SSE live feed.
+    setInterval(() => {
+        fetchSumpHistoricalData(currentSumpRangeHours);
+    }, SUMP_CHART_REFRESH_INTERVAL_MS);
 });
 
 // ... (rest of your script.js: history-range listener, resetZoomOnAllCharts, fetch functions, SSE connection functions) ...
@@ -336,6 +350,7 @@ if (sumpRunsPerDayChartInstance) {
 // --- Event Listener for History Range Dropdown ---
 document.getElementById('history-range').addEventListener('change', function() {
     const selectedHours = parseInt(this.value, 10);
+    currentSumpRangeHours = selectedHours;
     fetchTempMonitorHistoricalData(selectedHours); // Renamed function
     fetchSumpHistoricalData(selectedHours);      // New function
 });
@@ -499,6 +514,15 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
 }
 
 // --- Fetch Historical Data for Sump Pump ---
+// Picks a precip/SinceRun bar interval based on the selected history range,
+// so bars don't become too thin to read at wider ranges.
+function getSumpPrecipBinSizeMs(rangeHours) {
+    const HOUR_MS = 3600000;
+    if (rangeHours <= 24) return HOUR_MS;        // hourly bars: 1, 2, 4, 12, 24hr ranges
+    if (rangeHours <= 48) return 3 * HOUR_MS;    // 3-hour bars: 48hr range
+    return 24 * HOUR_MS;                          // daily bars: 1 week range
+}
+
 function fetchSumpHistoricalData(rangeHours) {
     console.log(`DEBUG: Fetching Sump Pump historical data for last ${rangeHours} hours.`);
 
@@ -571,48 +595,54 @@ function fetchSumpHistoricalData(rangeHours) {
                 sumpPowerChartInstance.update();
             }
 
-            // --- CORRECTED HOURLY AGGREGATION LOGIC ---
+            // --- BIN-SIZE-AWARE AGGREGATION LOGIC ---
+            // Bar width scales with the selected range so precip bars stay readable:
+            //   <=24hr -> hourly bins, 48hr -> 3-hour bins, 1 week -> daily bins
             getOrFetchMasterWeatherData().then(weatherData => {
                 if (sumpTimeHistory.length === 0) return;
 
-                const hourlyBins = new Map();
-                const getHour = (ts) => Math.floor(new Date(ts).getTime() / 3600000) * 3600000;
-                
-                // 1. Create hourly bins for the ENTIRE time range first
-                const startTime = getHour(sumpTimeHistory[0]);
-                const endTime = getHour(sumpTimeHistory[sumpTimeHistory.length - 1]);
+                const binSizeMs = getSumpPrecipBinSizeMs(rangeHours);
+                const getBinStart = (ts) => Math.floor(new Date(ts).getTime() / binSizeMs) * binSizeMs;
 
-                for (let currentHour = startTime; currentHour <= endTime; currentHour += 3600000) {
-                    // Initialize the bin with precipitation data from the master cache
-                    hourlyBins.set(currentHour, {
-                        sinceRunValues: [],
-                        precip: weatherData.get(currentHour)?.precip ?? 0
-                    });
+                const bins = new Map();
+
+                // 1. Create bins for the ENTIRE time range first
+                const startTime = getBinStart(sumpTimeHistory[0]);
+                const endTime = getBinStart(sumpTimeHistory[sumpTimeHistory.length - 1]);
+
+                for (let binStart = startTime; binStart <= endTime; binStart += binSizeMs) {
+                    // Sum every hourly precip reading that falls inside this bin
+                    // (for hourly bins this is just the single hour's value, same as before)
+                    let precipSum = 0;
+                    for (let hourTs = binStart; hourTs < binStart + binSizeMs; hourTs += 3600000) {
+                        precipSum += weatherData.get(hourTs)?.precip ?? 0;
+                    }
+                    bins.set(binStart, { sinceRunValues: [], precip: precipSum });
                 }
-                
+
                 // 2. Now, add the sump data into the appropriate, existing bins
                 for (let i = 0; i < sumpTimeHistory.length; i++) {
-                    const hourKey = getHour(sumpTimeHistory[i]);
-                    if (hourlyBins.has(hourKey)) {
-                        hourlyBins.get(hourKey).sinceRunValues.push(sumpSinceRunHistory[i]);
+                    const binKey = getBinStart(sumpTimeHistory[i]);
+                    if (bins.has(binKey)) {
+                        bins.get(binKey).sinceRunValues.push(sumpSinceRunHistory[i]);
                     }
                 }
                 
                 // 3. Sort the bins and create final chart arrays
-                const sortedKeys = Array.from(hourlyBins.keys()).sort((a, b) => a - b);
+                const sortedKeys = Array.from(bins.keys()).sort((a, b) => a - b);
                 
-                const hourlyLabels = sortedKeys.map(key => new Date(key));
-                const hourlySumpData = sortedKeys.map(key => {
-                    const values = hourlyBins.get(key).sinceRunValues;
+                const binnedLabels = sortedKeys.map(key => new Date(key));
+                const binnedSumpData = sortedKeys.map(key => {
+                    const values = bins.get(key).sinceRunValues;
                     return values.length > 0 ? values[values.length - 1] : null;
                 });
-                const hourlyPrecipData = sortedKeys.map(key => hourlyBins.get(key).precip);
+                const binnedPrecipData = sortedKeys.map(key => bins.get(key).precip);
 
                 // 4. Update the chart with the correctly aggregated data
                 if (sumpSinceRunChartInstance) {
-                    sumpSinceRunChartInstance.data.labels = hourlyLabels;
-                    sumpSinceRunChartInstance.data.datasets[0].data = hourlySumpData;
-                    sumpSinceRunChartInstance.data.datasets[1].data = hourlyPrecipData;
+                    sumpSinceRunChartInstance.data.labels = binnedLabels;
+                    sumpSinceRunChartInstance.data.datasets[0].data = binnedSumpData;
+                    sumpSinceRunChartInstance.data.datasets[1].data = binnedPrecipData;
                     sumpSinceRunChartInstance.update();
                 }
             });
@@ -740,21 +770,12 @@ function connectSumpMonitorSSE() {
             sumpMonitorStatusElement.textContent = "Receiving data";
             sumpMonitorStatusElement.style.color = 'green';
 
-            // --- Update Data History & Charts for Sump ---
-            sumpTimeHistory.push(timestamp);
-            sumpTempHistory.push(jsonData.temp);
-            sumpPowerHistory.push(jsonData.extPower);
-            sumpRuntimeHistory.push(jsonData.sumpRunTime);
-            sumpSinceRunHistory.push(jsonData.timeSinceRun);
-            
-            if (sumpTimeHistory.length > MAX_HISTORY_POINTS) {
-                sumpTimeHistory.shift(); sumpTempHistory.shift(); sumpPowerHistory.shift(); sumpRuntimeHistory.shift(); sumpSinceRunHistory.shift();
-            }
-            
-            if (sumpTempChartInstance) { sumpTempChartInstance.data.labels = sumpTimeHistory; sumpTempChartInstance.data.datasets[0].data = sumpTempHistory; sumpTempChartInstance.update(); }
-            if (sumpPowerChartInstance) { sumpPowerChartInstance.data.labels = sumpTimeHistory; sumpPowerChartInstance.data.datasets[0].data = sumpPowerHistory; sumpPowerChartInstance.update(); }
-            if (sumpRuntimeChartInstance) { sumpRuntimeChartInstance.data.labels = sumpTimeHistory; sumpRuntimeChartInstance.data.datasets[0].data = sumpRuntimeHistory; sumpRuntimeChartInstance.update(); }
-            if (sumpSinceRunChartInstance) { sumpSinceRunChartInstance.data.labels = sumpTimeHistory; sumpSinceRunChartInstance.data.datasets[0].data = sumpSinceRunHistory; sumpSinceRunChartInstance.update(); }
+            // NOTE: Sump charts are intentionally NOT updated here on every live
+            // sumpData event. Raw live points used to get appended directly on
+            // top of history that (for the SinceRun/Precip chart) is aggregated
+            // into bins, which is what caused the "weird" chart glitches. Charts
+            // now refresh by periodically re-fetching and re-aggregating the
+            // full history instead (see SUMP_CHART_REFRESH_INTERVAL_MS below).
 
         } catch (error) {
             console.error("DEBUG: Error processing Sump Monitor event data:", error, "Raw data:", event.data);
