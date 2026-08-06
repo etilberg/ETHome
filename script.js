@@ -60,6 +60,11 @@ let masterWeatherCache = {
     timestamp: 0     // Unix timestamp of the last successful fetch
 };
 const MASTER_CACHE_DURATION = 1 * 60 * 60 * 1000; // 1 hours in milliseconds
+// Bumped whenever the underlying weather data source/schema changes (e.g.
+// switching providers). A cached entry tagged with an older version is
+// treated as invalid and re-fetched, instead of silently being reused just
+// because it's still within MASTER_CACHE_DURATION.
+const WEATHER_CACHE_VERSION = 'nws-v1';
 
 function calculateMinMax(array) {
   if (!array.length) return { min: null, max: null };
@@ -1074,8 +1079,9 @@ async function getOrFetchMasterWeatherData() {
         const cachedItem = localStorage.getItem('masterWeatherCache');
         if (cachedItem) {
             const parsedCache = JSON.parse(cachedItem);
+            const isCurrentVersion = parsedCache.version === WEATHER_CACHE_VERSION;
             // Check if the localStorage cache is still valid (less than 30 mins old)
-            if (now - parsedCache.timestamp < MASTER_CACHE_DURATION) {
+            if (isCurrentVersion && now - parsedCache.timestamp < MASTER_CACHE_DURATION) {
                 console.log("DEBUG: Using master weather cache from localStorage.");
                 // Restore the Map data structure from the stored array
                 masterWeatherCache.data = new Map(parsedCache.data);
@@ -1083,6 +1089,10 @@ async function getOrFetchMasterWeatherData() {
                 diagState.weatherCacheTimestamp = masterWeatherCache.timestamp;
                 renderDiagnostics();
                 return masterWeatherCache.data;
+            }
+            if (!isCurrentVersion) {
+                console.log("DEBUG: Cached weather data is from an old data source version, discarding.");
+                localStorage.removeItem('masterWeatherCache');
             }
         }
     } catch (error) {
@@ -1114,7 +1124,8 @@ async function getOrFetchMasterWeatherData() {
             const dataToStore = Array.from(masterWeatherCache.data.entries());
             const cacheToSave = {
                 data: dataToStore,
-                timestamp: masterWeatherCache.timestamp
+                timestamp: masterWeatherCache.timestamp,
+                version: WEATHER_CACHE_VERSION
             };
             localStorage.setItem('masterWeatherCache', JSON.stringify(cacheToSave));
             console.log("DEBUG: Saved new weather data to localStorage for future sessions.");
