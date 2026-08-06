@@ -1091,6 +1091,11 @@ async function fetchMasterWeatherData() {
  * Controller function that decides whether to return cached data or fetch new data.
  * It now checks three levels: localStorage, in-memory cache, and then fetches from the API.
  */
+// Guards against concurrent callers (temp monitor + sump monitor both load
+// around the same time on page load) each seeing a stale cache and firing
+// their own redundant fetch. Cleared once the in-flight fetch settles.
+let masterWeatherFetchPromise = null;
+
 async function getOrFetchMasterWeatherData() {
     const now = Date.now();
 
@@ -1126,10 +1131,23 @@ async function getOrFetchMasterWeatherData() {
         renderDiagnostics();
         return masterWeatherCache.data;
     }
-    
+
     // --- Step 3 - Fetch new data if all caches are stale or empty ---
+    // If a fetch is already in flight (e.g. triggered by another chart a
+    // moment ago), piggyback on it instead of starting a second one.
+    if (masterWeatherFetchPromise) {
+        console.log("DEBUG: Weather fetch already in flight, reusing it.");
+        return masterWeatherFetchPromise;
+    }
+
     console.log("DEBUG: Master weather cache is stale or empty. Triggering new fetch.");
-    const newWeatherData = await fetchMasterWeatherData();
+    masterWeatherFetchPromise = fetchMasterWeatherData();
+    let newWeatherData;
+    try {
+        newWeatherData = await masterWeatherFetchPromise;
+    } finally {
+        masterWeatherFetchPromise = null;
+    }
     
     if (newWeatherData.size > 0) {
         // Update the in-memory cache
