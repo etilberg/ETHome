@@ -197,48 +197,101 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
     return chart;
 }
 
+// --- NWS/NOAA Weather Helpers ---
+// Both the current-conditions widget and the historical precip/temp cache
+// need to know which NWS observation station + forecast gridpoint cover our
+// coordinates. Resolved once via /points and cached for the page's lifetime.
+let nwsStationIdCache = null;
+let nwsGridForecastUrlCache = null;
+let nwsStationResolutionPromise = null;
+
+async function resolveNwsStation() {
+    // Guard against multiple simultaneous callers triggering duplicate /points lookups
+    if (nwsStationResolutionPromise) return nwsStationResolutionPromise;
+
+    nwsStationResolutionPromise = (async () => {
+        const pointRes = await fetch(`https://api.weather.gov/points/${NWS_LATITUDE},${NWS_LONGITUDE}`, {
+            headers: { 'Accept': 'application/geo+json' }
+        });
+        if (!pointRes.ok) throw new Error(`HTTP ${pointRes.status} on NWS /points lookup`);
+        const pointJson = await pointRes.json();
+
+        nwsGridForecastUrlCache = pointJson.properties.forecast;
+
+        const stationsRes = await fetch(pointJson.properties.observationStations, {
+            headers: { 'Accept': 'application/geo+json' }
+        });
+        if (!stationsRes.ok) throw new Error(`HTTP ${stationsRes.status} on NWS /stations lookup`);
+        const stationsJson = await stationsRes.json();
+        const firstStation = stationsJson.features && stationsJson.features[0];
+        if (!firstStation) throw new Error("NWS returned no observation stations for this location");
+
+        nwsStationIdCache = firstStation.properties.stationIdentifier || firstStation.id.split('/').pop();
+        console.log(`DEBUG: NWS resolved nearest station to ${nwsStationIdCache}`);
+        return nwsStationIdCache;
+    })();
+
+    return nwsStationResolutionPromise;
+}
+
 // --- Function to Fetch and Display Current Weather ---
 async function displayCurrentWeather() {
-    if (typeof VISUAL_CROSSING_API_KEY === 'undefined' || VISUAL_CROSSING_API_KEY.includes("YOUR_")) {
-        console.error("DEBUG: Visual Crossing API Key not set in config.js");
+    if (typeof NWS_LATITUDE === 'undefined' || typeof NWS_LONGITUDE === 'undefined') {
+        console.error("DEBUG: NWS_LATITUDE/NWS_LONGITUDE not set in config.js");
         return;
     }
 
-    const location = 'Watertown,SD';
-    const apiUrl = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/${location}?unitGroup=us&include=current&key=${VISUAL_CROSSING_API_KEY}&contentType=json`;
-
     try {
-        const response = await fetch(apiUrl);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        const stationId = await resolveNwsStation();
+        if (!stationId || !nwsGridForecastUrlCache) {
+            throw new Error("Could not resolve NWS station/gridpoint for these coordinates");
         }
 
-        const data = await response.json();
+        const [obsRes, forecastRes] = await Promise.all([
+            fetch(`https://api.weather.gov/stations/${stationId}/observations/latest`, { headers: { 'Accept': 'application/geo+json' } }),
+            fetch(nwsGridForecastUrlCache, { headers: { 'Accept': 'application/geo+json' } })
+        ]);
+        if (!obsRes.ok) throw new Error(`HTTP ${obsRes.status} fetching latest observation`);
+        if (!forecastRes.ok) throw new Error(`HTTP ${forecastRes.status} fetching forecast`);
 
-        const current = data.currentConditions;
-        const todayForecast = data.days[0];
-        const tomorrowForecast = data.days[1];
+        const obs = (await obsRes.json()).properties;
+        const periods = ((await forecastRes.json()).properties || {}).periods || [];
 
-        const currentTemp = Math.round(current.temp);
-        const dailyHigh = Math.round(todayForecast.tempmax);
-        const dailyLow = Math.round(todayForecast.tempmin);
-        const windSpeed = Math.round(current.windspeed);
-        const conditions = current.conditions;
-        const synopsis = todayForecast.description;
+        // NWS observations are always SI units (°C, km/h); the /forecast
+        // endpoint's periods, by contrast, come back already in °F.
+        const cToF = c => (c === null || c === undefined) ? null : Math.round(c * 9 / 5 + 32);
+        const kmhToMph = k => (k === null || k === undefined) ? null : Math.round(k * 0.621371);
 
-        document.getElementById('current-temp').textContent = `${currentTemp}°F`;
+        const currentTemp = cToF(obs.temperature && obs.temperature.value);
+        const windSpeed = kmhToMph(obs.windSpeed && obs.windSpeed.value);
+        const humidity = (obs.relativeHumidity && obs.relativeHumidity.value != null) ? Math.round(obs.relativeHumidity.value) : null;
+        const feelsLikeC = (obs.heatIndex && obs.heatIndex.value) ?? (obs.windChill && obs.windChill.value) ?? (obs.temperature && obs.temperature.value);
+        const feelsLike = cToF(feelsLikeC);
+        const conditions = obs.textDescription || '--';
+
+        // Forecast periods are always chronological but may start mid-day or
+        // mid-night depending on what time it is, so pick by isDaytime rather
+        // than by fixed index to reliably get "today" vs "tomorrow".
+        const daytimePeriods = periods.filter(p => p.isDaytime);
+        const nighttimePeriods = periods.filter(p => !p.isDaytime);
+        const dailyHigh = daytimePeriods[0] ? daytimePeriods[0].temperature : null;
+        const dailyLow = nighttimePeriods[0] ? nighttimePeriods[0].temperature : null;
+        const tomorrowHigh = daytimePeriods[1] ? daytimePeriods[1].temperature : null;
+        const tomorrowLow = nighttimePeriods[1] ? nighttimePeriods[1].temperature : null;
+        const synopsis = (daytimePeriods[0] || periods[0] || {}).detailedForecast || '--';
+
+        document.getElementById('current-temp').textContent = currentTemp !== null ? `${currentTemp}°F` : '--°F';
         document.getElementById('current-condition').textContent = conditions;
-        document.getElementById('high-low').innerHTML = `H: <span class="temp-high">${dailyHigh}°</span> / L: <span class="temp-low">${dailyLow}°</span>`;
-        document.getElementById('wind-speed').textContent = `Wind: ${windSpeed} mph`;
+        document.getElementById('high-low').innerHTML = `H: <span class="temp-high">${dailyHigh ?? '--'}°</span> / L: <span class="temp-low">${dailyLow ?? '--'}°</span>`;
+        document.getElementById('wind-speed').textContent = `Wind: ${windSpeed !== null ? windSpeed : '--'} mph`;
         document.getElementById('forecast-synopsis').querySelector('p').textContent = synopsis;
-
-        // New fields
-        document.getElementById('humidity').textContent = `Humidity: ${Math.round(current.humidity)}%`;
-        document.getElementById('feels-like').textContent = `Feels like: ${Math.round(current.feelslike)}°`;
-        document.getElementById('tomorrow-forecast').textContent = `Tomorrow: H: ${Math.round(tomorrowForecast.tempmax)}° / L: ${Math.round(tomorrowForecast.tempmin)}°`;
+        document.getElementById('humidity').textContent = `Humidity: ${humidity !== null ? humidity : '--'}%`;
+        document.getElementById('feels-like').textContent = `Feels like: ${feelsLike !== null ? feelsLike : '--'}°`;
+        document.getElementById('tomorrow-forecast').textContent = `Tomorrow: H: ${tomorrowHigh ?? '--'}° / L: ${tomorrowLow ?? '--'}°`;
 
     } catch (error) {
-        console.error("Could not fetch current weather:", error);
+        console.error("Could not fetch current weather from NWS:", error);
+        if (typeof logDiagError === 'function') logDiagError("NWS current weather", error);
         const locationEl = document.getElementById('weather-location');
         if (locationEl) {
             locationEl.textContent = "Weather data unavailable.";
@@ -944,38 +997,64 @@ function connectSumpMonitorSSE() {
  * The single function responsible for fetching 7 days of weather data from the API.
  * This should only be called by the controller function below.
  */
+// Fetches ~7 days of hourly station observations from NWS/NOAA and returns
+// them in the exact same shape the rest of the dashboard already expects:
+// Map<hourEpochMs, {temp: °F, precip: inches}>. Keeping that output contract
+// means nothing downstream (precip binning, outdoor-temp overlay, caching)
+// needed to change -- only the data source did.
 async function fetchMasterWeatherData() {
-    console.log("DEBUG: Fetching 7-day master weather data from Visual Crossing API.");
+    console.log("DEBUG: Fetching 7-day master weather data from NWS/NOAA.");
     const weatherDataMap = new Map();
-    
-    // Fetch one day at a time with a delay between requests
-    for (let i = 0; i < 7; i++) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const dayString = date.toISOString().split('T')[0];
-        
-        const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Watertown,SD/${dayString}/${dayString}?unitGroup=us&timezone=America/Chicago&key=${VISUAL_CROSSING_API_KEY}&include=hours&contentType=json`;
-        
-        try {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`HTTP error ${res.status} for day ${dayString}`);
-            const json = await res.json();
-            const hours = (json.days && json.days[0] && json.days[0].hours) || [];
-            
-            for (const hour of hours) {
-                const ts = new Date(hour.datetimeEpoch * 1000).getTime();
-                weatherDataMap.set(ts, { temp: hour.temp, precip: hour.precip });
-            }
-        } catch (error) {
-            console.error("DEBUG: A daily fetch for the master weather cache failed:", error);
+    // Tracks the observation timestamp actually used for each hour bucket, so
+    // that if two reports (e.g. a routine + a special METAR) land in the same
+    // hour, we keep the more recent one rather than double-counting/overwriting
+    // with an older report.
+    const bucketObsTime = new Map();
+
+    try {
+        const stationId = await resolveNwsStation();
+        if (!stationId) throw new Error("No NWS station resolved");
+
+        const end = new Date();
+        const start = new Date(end.getTime() - 7 * 24 * 3600000);
+        const url = `https://api.weather.gov/stations/${stationId}/observations?start=${start.toISOString()}&end=${end.toISOString()}&limit=500`;
+
+        const res = await fetch(url, { headers: { 'Accept': 'application/geo+json' } });
+        if (!res.ok) throw new Error(`HTTP error ${res.status} fetching NWS observations`);
+        const json = await res.json();
+        const features = json.features || [];
+
+        for (const feature of features) {
+            const p = feature.properties || {};
+            if (!p.timestamp) continue;
+            const obsTime = new Date(p.timestamp).getTime();
+            const hourTs = Math.floor(obsTime / 3600000) * 3600000;
+
+            // Only overwrite a bucket if this observation is newer than
+            // whatever's already in it (station data isn't always exactly
+            // hourly -- special reports can land mid-hour).
+            if (bucketObsTime.has(hourTs) && bucketObsTime.get(hourTs) >= obsTime) continue;
+            bucketObsTime.set(hourTs, obsTime);
+
+            const tempC = p.temperature && p.temperature.value;
+            const tempF = (tempC === null || tempC === undefined) ? null : (tempC * 9 / 5 + 32);
+
+            // precipitationLastHour is in meters when present; null just means
+            // "no precip reported this hour" for this station, not missing data,
+            // so it's treated as 0 -- same fallback the old code used.
+            const precipM = p.precipitationLastHour && p.precipitationLastHour.value;
+            const precipIn = (precipM === null || precipM === undefined) ? 0 : (precipM * 39.3701);
+
+            weatherDataMap.set(hourTs, { temp: tempF, precip: precipIn });
         }
-        
-        // Add a 500ms delay between requests to respect rate limits
-        if (i < 6) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-        }
+
+        console.log(`DEBUG: NWS station ${stationId} returned ${weatherDataMap.size} hourly buckets.`);
+    } catch (error) {
+        console.error("DEBUG: NWS master weather fetch failed:", error);
+        diagState.lastError = `${new Date().toLocaleTimeString()} - NWS weather fetch: ${error.message}`;
+        renderDiagnostics();
     }
-    
+
     return weatherDataMap;
 }
 
