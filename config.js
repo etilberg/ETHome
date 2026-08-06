@@ -5,7 +5,13 @@
 // !! Avoid committing actual tokens to public repositories if security is critical.
 // config.js
 
-const VISUAL_CROSSING_API_KEY = "67YNPN46DR5ATZVK8QMXT54HL";
+// -- Weather (National Weather Service / NOAA, api.weather.gov) --
+// Coordinates of the monitored property. Used once on load to resolve the
+// nearest NWS observation station (for current conditions + historical
+// precip) and forecast gridpoint (for the daily high/low + synopsis text).
+// No API key needed -- api.weather.gov is free, public, and unauthenticated.
+const NWS_LATITUDE = 44.925639;
+const NWS_LONGITUDE = -97.101472;
 
 // -- Device 1: Fridge/Freezer Monitor --
 // ... (rest of the file)
