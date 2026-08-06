@@ -19,6 +19,17 @@ const sumpRuntimeElement = document.getElementById('sump-runtime');
 const sumpSinceRunElement = document.getElementById('sump-since-run');
 const sumpMonitorLastUpdatedElement = document.getElementById('sump-monitor-last-updated');
 
+// Diagnostics Elements
+const diagSumpConnElement = document.getElementById('diag-sump-conn');
+const diagSumpDroppedElement = document.getElementById('diag-sump-dropped');
+const diagSumpFailsElement = document.getElementById('diag-sump-fails');
+const diagSumpCsvAgeElement = document.getElementById('diag-sump-csv-age');
+const diagTempConnElement = document.getElementById('diag-temp-conn');
+const diagTempCsvAgeElement = document.getElementById('diag-temp-csv-age');
+const diagWeatherAgeElement = document.getElementById('diag-weather-age');
+const diagSumpChartRefreshElement = document.getElementById('diag-sump-chart-refresh');
+const diagLastErrorElement = document.getElementById('diag-last-error');
+
 // --- Data Storage ---
 let timeHistory = [];
 let fridgeHistory = [];
@@ -26,11 +37,9 @@ let freezerHistory = [];
 let garageHistory = [];
 let heaterStatusHistory = [];
 let outdoorTempHistory = [];
-let garageOutdoorTemps = [];
 
 let sumpTimeHistory = [];
 let sumpTempHistory = [];
-let sumpPowerHistory = [];
 let sumpRuntimeHistory = [];
 let sumpSinceRunHistory = [];
 
@@ -42,7 +51,7 @@ const SUMP_CHART_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 // --- Chart Instance Variables ---
 let fridgeChartInstance, freezerChartInstance, garageChartInstance;
-let sumpTempChartInstance, sumpPowerChartInstance, sumpRuntimeChartInstance, sumpSinceRunChartInstance;
+let sumpTempChartInstance, sumpRuntimeChartInstance, sumpSinceRunChartInstance;
 let sumpRunsPerDayChartInstance; 
 
 // A single, unified cache for all weather station data
@@ -60,6 +69,60 @@ function calculateMinMax(array) {
   };
 }
 
+// ================================
+// Diagnostics Panel
+// ================================
+// Central place for troubleshooting info: connection status, firmware-reported
+// dropped/failed publishes, how stale each data source is, and the last error
+// hit anywhere in the app. Update diagState from wherever something relevant
+// happens, then call renderDiagnostics() to reflect it in the DOM.
+const diagState = {
+    sumpConn: 'Initializing...',
+    sumpDropped: null,
+    sumpFails: null,
+    sumpCsvLatest: null,       // timestamp (ms) of the newest row in the last sump CSV fetch
+    tempConn: 'Initializing...',
+    tempCsvLatest: null,       // timestamp (ms) of the newest row in the last temp CSV fetch
+    weatherCacheTimestamp: 0,  // when masterWeatherCache was last populated
+    sumpChartLastRefresh: null,
+    lastError: null,
+};
+
+function formatAgo(timestampMs) {
+    if (!timestampMs) return '--';
+    const diffSec = Math.round((Date.now() - timestampMs) / 1000);
+    if (diffSec < 5) return 'just now';
+    if (diffSec < 60) return `${diffSec}s ago`;
+    const diffMin = Math.round(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = (diffMin / 60).toFixed(1);
+    return `${diffHr}h ago`;
+}
+
+function logDiagError(context, error) {
+    console.error(`DEBUG: [${context}]`, error);
+    diagState.lastError = `${new Date().toLocaleTimeString()} - ${context}: ${error.message || error}`;
+    renderDiagnostics();
+}
+
+function renderDiagnostics() {
+    if (diagSumpConnElement) diagSumpConnElement.textContent = diagState.sumpConn;
+    if (diagSumpDroppedElement) {
+        diagSumpDroppedElement.textContent = diagState.sumpDropped ?? '--';
+        diagSumpDroppedElement.style.color = diagState.sumpDropped > 0 ? '#ff6b6b' : '';
+    }
+    if (diagSumpFailsElement) {
+        diagSumpFailsElement.textContent = diagState.sumpFails ?? '--';
+        diagSumpFailsElement.style.color = diagState.sumpFails > 0 ? '#ff6b6b' : '';
+    }
+    if (diagSumpCsvAgeElement) diagSumpCsvAgeElement.textContent = formatAgo(diagState.sumpCsvLatest);
+    if (diagTempConnElement) diagTempConnElement.textContent = diagState.tempConn;
+    if (diagTempCsvAgeElement) diagTempCsvAgeElement.textContent = formatAgo(diagState.tempCsvLatest);
+    if (diagWeatherAgeElement) diagWeatherAgeElement.textContent = formatAgo(diagState.weatherCacheTimestamp);
+    if (diagSumpChartRefreshElement) diagSumpChartRefreshElement.textContent = formatAgo(diagState.sumpChartLastRefresh);
+    if (diagLastErrorElement) diagLastErrorElement.textContent = diagState.lastError ?? 'None';
+}
+
 function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)') {
     const canvasElement = document.getElementById(canvasId);
     if (!canvasElement) {
@@ -72,7 +135,7 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
         return null;
     }
 
-    return new Chart(ctx, {
+    const chart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: [],
@@ -111,15 +174,15 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
                 },
                 zoom: {
                     pan: {
-                        enabled: false,
+                        enabled: true,
                         mode: 'x'
                     },
                     zoom: {
                         wheel: {
-                            enabled: false
+                            enabled: true
                         },
                         pinch: {
-                            enabled: false
+                            enabled: true
                         },
                         mode: 'x'
                     }
@@ -127,6 +190,11 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
             }
         }
     });
+
+    // Double-click a chart to reset pan/zoom back to the full range
+    canvasElement.addEventListener('dblclick', () => chart.resetZoom());
+
+    return chart;
 }
 
 // --- Function to Fetch and Display Current Weather ---
@@ -246,7 +314,6 @@ document.addEventListener('DOMContentLoaded', () => {
         garageChartInstance.update();
     }
     sumpTempChartInstance = createChart('sumpTempChart', 'Basement Temperature (°F)', 'rgb(255, 206, 86)');
-    sumpPowerChartInstance = createChart('sumpPowerChart', 'External Power (V)', 'rgb(153, 102, 255)', 'Voltage (V)');
     sumpRuntimeChartInstance = createChart('sumpRuntimeChart', 'Sump Runtime (sec)', 'rgb(255, 159, 64)', 'Runtime (seconds)');
 
     const sumpSinceRunCtx = document.getElementById('sumpSinceRunChart').getContext('2d');
@@ -303,9 +370,28 @@ document.addEventListener('DOMContentLoaded', () => {
                         beginAtZero: true
                     }
                 }
+            },
+            plugins: {
+                zoom: {
+                    pan: {
+                        enabled: true,
+                        mode: 'x'
+                    },
+                    zoom: {
+                        wheel: {
+                            enabled: true
+                        },
+                        pinch: {
+                            enabled: true
+                        },
+                        mode: 'x'
+                    }
+                }
             }
         }
     });
+    // Double-click to reset pan/zoom back to the full range
+    document.getElementById('sumpSinceRunChart').addEventListener('dblclick', () => sumpSinceRunChartInstance.resetZoom());
   
     // ======================= INITIALIZE THE RunsPerDay CHART =======================
     sumpRunsPerDayChartInstance = createChart('sumpRunsPerDayChart', 'Total Cycles', 'rgb(129, 201, 149)', 'Number of Runs');
@@ -343,6 +429,12 @@ if (sumpRunsPerDayChartInstance) {
     setInterval(() => {
         fetchSumpHistoricalData(currentSumpRangeHours);
     }, SUMP_CHART_REFRESH_INTERVAL_MS);
+
+    // Diagnostics panel: render immediately, then keep the relative "X ago"
+    // fields (weather cache age, sump chart refresh age, CSV freshness)
+    // ticking even when no new event has come in.
+    renderDiagnostics();
+    setInterval(renderDiagnostics, 30 * 1000);
 });
 
 // ... (rest of your script.js: history-range listener, resetZoomOnAllCharts, fetch functions, SSE connection functions) ...
@@ -373,6 +465,17 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
             if (lines.length <= 1) {
                 console.warn("DEBUG: Temp CSV has no data rows.");
                 return;
+            }
+
+            // Diagnostics: how fresh is the underlying Google Sheet, regardless
+            // of the currently-selected range (captured from the raw last row,
+            // not the range-filtered data, so it stays meaningful even if the
+            // sheet is stale relative to a short selected range).
+            const lastRawCols = lines[lines.length - 1].split(',');
+            const lastRawTs = new Date(lastRawCols[0]);
+            if (!isNaN(lastRawTs.getTime())) {
+                diagState.tempCsvLatest = lastRawTs.getTime();
+                renderDiagnostics();
             }
 
             // Clear existing history arrays
@@ -461,8 +564,8 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
             const freezerMinMax = calculateMinMax(freezerHistory);
             const garageMinMax = calculateMinMax(garageHistory);
 
-            document.getElementById('fridge-stats').innerHTML = `H: <span class="temp-high">${fridgeMinMax.max.toFixed(0)}°</span> / L: <span class="temp-low">${fridgeMinMax.min.toFixed(0)}°</span>`;
-            document.getElementById('freezer-stats').innerHTML = `H: <span class="temp-high">${freezerMinMax.max.toFixed(0)}°</span> / L: <span class="temp-low">${freezerMinMax.min.toFixed(0)}°</span>`;
+            document.getElementById('fridge-stats').innerHTML = `H: <span class="temp-high">${fridgeMinMax.max?.toFixed(0)}°</span> / L: <span class="temp-low">${fridgeMinMax.min?.toFixed(0)}°</span>`;
+            document.getElementById('freezer-stats').innerHTML = `H: <span class="temp-high">${freezerMinMax.max?.toFixed(0)}°</span> / L: <span class="temp-low">${freezerMinMax.min?.toFixed(0)}°</span>`;
             document.getElementById('garage-stats').innerHTML = `H: <span class="temp-high">${garageMinMax.max?.toFixed(0)}°</span> / L: <span class="temp-low">${garageMinMax.min?.toFixed(0)}°</span>`;
 
             // Update heater display with the calculated total run time
@@ -497,11 +600,18 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
                           // Get the temp property from the master data
                           return weatherData.get(hourTs)?.temp ?? null;
                       });
-  
+
+                      // Rebuild outdoorTempHistory IN PLACE (rather than swapping in a
+                      // brand-new array) so it stays the same array reference the live
+                      // SSE handler pushes into below -- otherwise live points would
+                      // silently stop showing up on the Outdoor Temp overlay.
+                      outdoorTempHistory.length = 0;
+                      outdoorTempHistory.push(...mappedTemps);
+
                       if (garageChartInstance) {
                           const outdoorDataset = garageChartInstance.data.datasets.find(d => d.label === "Outdoor Temp (°F)");
                           if (outdoorDataset) {
-                              outdoorDataset.data = mappedTemps;
+                              outdoorDataset.data = outdoorTempHistory;
                               garageChartInstance.update();
                           }
                       }
@@ -509,7 +619,7 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
               }
         })
         .catch(err => {
-            console.error("DEBUG: Failed to fetch historical temp data:", err);
+            logDiagError("Temp Monitor history fetch", err);
         });
 }
 
@@ -520,7 +630,7 @@ function getSumpPrecipBinSizeMs(rangeHours) {
     const HOUR_MS = 3600000;
     if (rangeHours <= 24) return HOUR_MS;        // hourly bars: 1, 2, 4, 12, 24hr ranges
     if (rangeHours <= 48) return 3 * HOUR_MS;    // 3-hour bars: 48hr range
-    return 24 * HOUR_MS;                          // daily bars: 1 week range
+    return 12 * HOUR_MS;                          // 12-hour bars: 1 week range
 }
 
 function fetchSumpHistoricalData(rangeHours) {
@@ -554,10 +664,21 @@ function fetchSumpHistoricalData(rangeHours) {
               return;
             }
 
+            // Diagnostics: freshness of the underlying Google Sheet, from the
+            // raw last row (unfiltered by the selected range).
+            if (lines.length > 0) {
+                const lastRawCols = lines[lines.length - 1].split(',');
+                const lastRawTs = new Date(lastRawCols[tsIdx]);
+                if (!isNaN(lastRawTs.getTime())) {
+                    diagState.sumpCsvLatest = lastRawTs.getTime();
+                }
+            }
+            diagState.sumpChartLastRefresh = Date.now();
+            renderDiagnostics();
+
             // Clear old data
             sumpTimeHistory.length = 0;
             sumpTempHistory.length = 0;
-            sumpPowerHistory.length = 0;
             sumpRuntimeHistory.length = 0;
             sumpSinceRunHistory.length = 0;
 
@@ -589,12 +710,6 @@ function fetchSumpHistoricalData(rangeHours) {
                 sumpRuntimeChartInstance.data.datasets[0].data = sumpRuntimeHistory;
                 sumpRuntimeChartInstance.update();
             }
-            if (sumpPowerChartInstance) {
-                sumpPowerChartInstance.data.labels = sumpTimeHistory;
-                sumpPowerChartInstance.data.datasets[0].data = sumpPowerHistory;
-                sumpPowerChartInstance.update();
-            }
-
             // --- BIN-SIZE-AWARE AGGREGATION LOGIC ---
             // Bar width scales with the selected range so precip bars stay readable:
             //   <=24hr -> hourly bins, 48hr -> 3-hour bins, 1 week -> daily bins
@@ -648,7 +763,7 @@ function fetchSumpHistoricalData(rangeHours) {
             });
         })
         .catch(error => {
-            console.error("DEBUG: Failed to fetch sump history:", error);
+            logDiagError("Sump history fetch", error);
         });
 }
 
@@ -673,6 +788,8 @@ function connectTempMonitorSSE() {
         console.log("DEBUG: Temp Monitor SSE Connected!");
         tempMonitorStatusElement.textContent = "Connected";
         tempMonitorStatusElement.style.color = 'green';
+        diagState.tempConn = "Connected";
+        renderDiagnostics();
     };
 
     eventSource.addEventListener(TEMP_MONITOR_EVENT_NAME, function(event) {
@@ -707,25 +824,46 @@ function connectTempMonitorSSE() {
             freezerHistory.push(jsonData.freezer);
             garageHistory.push(jsonData.garage);
 
+            // Keep the fridge chart's Heater Status overlay in step with the
+            // primary arrays -- it used to only get rebuilt on a full history
+            // fetch, so it would drift out of alignment as live points came in.
+            const heaterStatusValue = (jsonData.heateron === 1 || jsonData.heateron === "1") ? 1 : 0;
+            heaterStatusHistory.push(heaterStatusValue);
+
+            // Same for the garage chart's Outdoor Temp overlay. This is a plain
+            // read against the already-cached weather Map (no new fetch), so it
+            // won't trigger extra Visual Crossing API calls on every live event.
+            const hourTs = Math.floor(timestamp.getTime() / 3600000) * 3600000;
+            const outdoorTempValue = masterWeatherCache.data.get(hourTs)?.temp ?? null;
+            outdoorTempHistory.push(outdoorTempValue);
+
             if (timeHistory.length > MAX_HISTORY_POINTS) {
                 timeHistory.shift(); fridgeHistory.shift(); freezerHistory.shift(); garageHistory.shift();
+                heaterStatusHistory.shift(); outdoorTempHistory.shift();
             }
 
-            if (fridgeChartInstance) { fridgeChartInstance.data.labels = timeHistory; fridgeChartInstance.data.datasets[0].data = fridgeHistory; fridgeChartInstance.update(); }
+            if (fridgeChartInstance) { fridgeChartInstance.data.labels = timeHistory; fridgeChartInstance.data.datasets[0].data = fridgeHistory; fridgeChartInstance.data.datasets[1].data = heaterStatusHistory; fridgeChartInstance.update(); }
             if (freezerChartInstance) { freezerChartInstance.data.labels = timeHistory; freezerChartInstance.data.datasets[0].data = freezerHistory; freezerChartInstance.update(); }
-            if (garageChartInstance) { garageChartInstance.data.labels = timeHistory; garageChartInstance.data.datasets[0].data = garageHistory; garageChartInstance.update(); }
+            if (garageChartInstance) { garageChartInstance.data.labels = timeHistory; garageChartInstance.data.datasets[0].data = garageHistory; garageChartInstance.data.datasets[1].data = outdoorTempHistory; garageChartInstance.update(); }
+
+            diagState.tempConn = "Receiving data";
+            renderDiagnostics();
 
         } catch (error) {
             console.error("DEBUG: Error processing Temp Monitor event data:", error, "Raw data:", event.data);
             tempMonitorStatusElement.textContent = "Data Error";
             tempMonitorStatusElement.style.color = 'orange';
+            logDiagError("Temp Monitor SSE parse", error);
         }
     }, false);
 
     eventSource.onerror = function(err) {
         console.error("DEBUG: Temp Monitor EventSource failed:", err);
-        tempMonitorStatusElement.textContent = (err.target && err.target.readyState === EventSource.CLOSED) ? 'Conn. Closed' : "Conn. Error";
+        const statusText = (err.target && err.target.readyState === EventSource.CLOSED) ? 'Conn. Closed' : "Conn. Error";
+        tempMonitorStatusElement.textContent = statusText;
         tempMonitorStatusElement.style.color = 'red';
+        diagState.tempConn = statusText;
+        renderDiagnostics();
     };
 }
 
@@ -750,6 +888,8 @@ function connectSumpMonitorSSE() {
         //console.log("DEBUG: Sump Monitor SSE Connected!");
         sumpMonitorStatusElement.textContent = "Connected";
         sumpMonitorStatusElement.style.color = 'green';
+        diagState.sumpConn = "Connected";
+        renderDiagnostics();
     };
 
     eventSource.addEventListener(SUMP_MONITOR_EVENT_NAME, function(event) {
@@ -777,17 +917,27 @@ function connectSumpMonitorSSE() {
             // now refresh by periodically re-fetching and re-aggregating the
             // full history instead (see SUMP_CHART_REFRESH_INTERVAL_MS below).
 
+            // --- Diagnostics: surface the firmware's own health counters ---
+            diagState.sumpConn = "Receiving data";
+            if (jsonData.droppedEvents !== undefined) diagState.sumpDropped = jsonData.droppedEvents;
+            if (jsonData.publishFails !== undefined) diagState.sumpFails = jsonData.publishFails;
+            renderDiagnostics();
+
         } catch (error) {
             console.error("DEBUG: Error processing Sump Monitor event data:", error, "Raw data:", event.data);
             sumpMonitorStatusElement.textContent = "Data Error";
             sumpMonitorStatusElement.style.color = 'orange';
+            logDiagError("Sump SSE parse", error);
         }
     }, false);
 
      eventSource.onerror = function(err) {
         console.error("DEBUG: Sump Monitor EventSource failed:", err);
-        sumpMonitorStatusElement.textContent = (err.target && err.target.readyState === EventSource.CLOSED) ? 'Conn. Closed' : "Conn. Error";
+        const statusText = (err.target && err.target.readyState === EventSource.CLOSED) ? 'Conn. Closed' : "Conn. Error";
+        sumpMonitorStatusElement.textContent = statusText;
         sumpMonitorStatusElement.style.color = 'red';
+        diagState.sumpConn = statusText;
+        renderDiagnostics();
     };
 }
 /**
@@ -851,6 +1001,8 @@ async function getOrFetchMasterWeatherData() {
                 // Restore the Map data structure from the stored array
                 masterWeatherCache.data = new Map(parsedCache.data);
                 masterWeatherCache.timestamp = parsedCache.timestamp;
+                diagState.weatherCacheTimestamp = masterWeatherCache.timestamp;
+                renderDiagnostics();
                 return masterWeatherCache.data;
             }
         }
@@ -861,6 +1013,8 @@ async function getOrFetchMasterWeatherData() {
     // --- Step 2 - Check the in-memory cache (for the current session) ---
     if (now - masterWeatherCache.timestamp < MASTER_CACHE_DURATION && masterWeatherCache.data.size > 0) {
         console.log("DEBUG: Using master weather cache (in-memory).");
+        diagState.weatherCacheTimestamp = masterWeatherCache.timestamp;
+        renderDiagnostics();
         return masterWeatherCache.data;
     }
     
@@ -872,6 +1026,8 @@ async function getOrFetchMasterWeatherData() {
         // Update the in-memory cache
         masterWeatherCache.data = newWeatherData;
         masterWeatherCache.timestamp = Date.now();
+        diagState.weatherCacheTimestamp = masterWeatherCache.timestamp;
+        renderDiagnostics();
 
         // --- NEW: Step 4 - Save the newly fetched data to localStorage ---
         try {
@@ -888,38 +1044,11 @@ async function getOrFetchMasterWeatherData() {
         }
     } else {
         console.error("DEBUG: Master weather fetch returned no data. Cache not updated.");
+        diagState.lastError = `${new Date().toLocaleTimeString()} - Weather fetch: returned no data`;
+        renderDiagnostics();
     }
     
     return masterWeatherCache.data;
-}
-
-function applyOutdoorTemps(hourlyTemps) {
-  const outdoorTemps = [];
-  let currentIndex = 0;
-
-  for (const t of timeHistory) {
-    const timestamp = new Date(t);
-    while (
-      currentIndex < hourlyTemps.length - 1 &&
-      hourlyTemps[currentIndex + 1].time <= timestamp
-    ) {
-      currentIndex++;
-    }
-
-    const outdoor = hourlyTemps[currentIndex];
-    outdoorTemps.push(outdoor?.temp ?? null);
-  }
-
-  // Set the data on garage chart
-  if (garageChartInstance) {
-    const garageDataset = garageChartInstance.data.datasets.find(ds => ds.label === "Outdoor Temp (°F)");
-    if (garageDataset) {
-      garageDataset.data = outdoorTemps;
-      garageChartInstance.update();
-    }
-  }
-
-  console.log(`DEBUG: Mapped ${outdoorTemps.filter(v => v !== null).length} outdoor temps to ${timeHistory.length} garage timestamps.`);
 }
 
 // ======================= SUMP PUMP ANALYTICS FUNCTIONS =======================
