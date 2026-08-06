@@ -64,7 +64,7 @@ const MASTER_CACHE_DURATION = 1 * 60 * 60 * 1000; // 1 hours in milliseconds
 // switching providers). A cached entry tagged with an older version is
 // treated as invalid and re-fetched, instead of silently being reused just
 // because it's still within MASTER_CACHE_DURATION.
-const WEATHER_CACHE_VERSION = 'nws-v1';
+const WEATHER_CACHE_VERSION = 'nws-v2';
 
 function calculateMinMax(array) {
   if (!array.length) return { min: null, max: null };
@@ -1020,40 +1020,60 @@ async function fetchMasterWeatherData() {
         const stationId = await resolveNwsStation();
         if (!stationId) throw new Error("No NWS station resolved");
 
-        const end = new Date();
-        const start = new Date(end.getTime() - 7 * 24 * 3600000);
-        const url = `https://api.weather.gov/stations/${stationId}/observations?start=${start.toISOString()}&end=${end.toISOString()}&limit=500`;
+        // Fetch one day at a time rather than one wide 7-day request. A single
+        // wide request can silently cap out at however many records the API
+        // returns per call -- we hit exactly this with a combined request,
+        // which only came back with ~3 days for a station reporting more often
+        // than hourly. Day-sized windows stay comfortably under any such cap
+        // regardless of reporting frequency, at the cost of 7 small requests
+        // instead of 1 (still trivial for an unauthenticated, keyless API).
+        for (let i = 0; i < 7; i++) {
+            const dayEnd = new Date(Date.now() - i * 24 * 3600000);
+            const dayStart = new Date(dayEnd.getTime() - 24 * 3600000);
+            const url = `https://api.weather.gov/stations/${stationId}/observations?start=${dayStart.toISOString()}&end=${dayEnd.toISOString()}&limit=500`;
 
-        const res = await fetch(url, { headers: { 'Accept': 'application/geo+json' } });
-        if (!res.ok) throw new Error(`HTTP error ${res.status} fetching NWS observations`);
-        const json = await res.json();
-        const features = json.features || [];
+            try {
+                const res = await fetch(url, { headers: { 'Accept': 'application/geo+json' } });
+                if (!res.ok) throw new Error(`HTTP error ${res.status} for day offset ${i}`);
+                const json = await res.json();
+                const features = json.features || [];
 
-        for (const feature of features) {
-            const p = feature.properties || {};
-            if (!p.timestamp) continue;
-            const obsTime = new Date(p.timestamp).getTime();
-            const hourTs = Math.floor(obsTime / 3600000) * 3600000;
+                for (const feature of features) {
+                    const p = feature.properties || {};
+                    if (!p.timestamp) continue;
+                    const obsTime = new Date(p.timestamp).getTime();
+                    const hourTs = Math.floor(obsTime / 3600000) * 3600000;
 
-            // Only overwrite a bucket if this observation is newer than
-            // whatever's already in it (station data isn't always exactly
-            // hourly -- special reports can land mid-hour).
-            if (bucketObsTime.has(hourTs) && bucketObsTime.get(hourTs) >= obsTime) continue;
-            bucketObsTime.set(hourTs, obsTime);
+                    // Only overwrite a bucket if this observation is newer than
+                    // whatever's already in it (station data isn't always exactly
+                    // hourly -- special reports can land mid-hour).
+                    if (bucketObsTime.has(hourTs) && bucketObsTime.get(hourTs) >= obsTime) continue;
+                    bucketObsTime.set(hourTs, obsTime);
 
-            const tempC = p.temperature && p.temperature.value;
-            const tempF = (tempC === null || tempC === undefined) ? null : (tempC * 9 / 5 + 32);
+                    const tempC = p.temperature && p.temperature.value;
+                    const tempF = (tempC === null || tempC === undefined) ? null : (tempC * 9 / 5 + 32);
 
-            // precipitationLastHour is in meters when present; null just means
-            // "no precip reported this hour" for this station, not missing data,
-            // so it's treated as 0 -- same fallback the old code used.
-            const precipM = p.precipitationLastHour && p.precipitationLastHour.value;
-            const precipIn = (precipM === null || precipM === undefined) ? 0 : (precipM * 39.3701);
+                    // precipitationLastHour is in meters when present; null just
+                    // means "no precip reported this hour" for this station, not
+                    // missing data, so it's treated as 0 -- same fallback the old
+                    // code used.
+                    const precipM = p.precipitationLastHour && p.precipitationLastHour.value;
+                    const precipIn = (precipM === null || precipM === undefined) ? 0 : (precipM * 39.3701);
 
-            weatherDataMap.set(hourTs, { temp: tempF, precip: precipIn });
+                    weatherDataMap.set(hourTs, { temp: tempF, precip: precipIn });
+                }
+            } catch (dayError) {
+                console.error(`DEBUG: NWS observation fetch failed for day offset ${i}:`, dayError);
+            }
+
+            // Small stagger between requests -- not required by NWS (no API key,
+            // no published hard rate limit), just being a polite client.
+            if (i < 6) {
+                await new Promise(resolve => setTimeout(resolve, 150));
+            }
         }
 
-        console.log(`DEBUG: NWS station ${stationId} returned ${weatherDataMap.size} hourly buckets.`);
+        console.log(`DEBUG: NWS station ${stationId} returned ${weatherDataMap.size} hourly buckets across 7 daily requests.`);
     } catch (error) {
         console.error("DEBUG: NWS master weather fetch failed:", error);
         diagState.lastError = `${new Date().toLocaleTimeString()} - NWS weather fetch: ${error.message}`;
