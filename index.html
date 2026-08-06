@@ -107,10 +107,8 @@
         <div class="chart-container"><canvas id="sumpSinceRunChart"></canvas></div>
         <div class="chart-container"><canvas id="sumpRuntimeChart"></canvas></div>
         <div class="chart-container"><canvas id="sumpTempChart"></canvas></div>
-        <!--div class="chart-container"><canvas id="sumpPowerChart"></canvas></div-->
     <p><small>Last updated: <span id="sump-monitor-last-updated">Never</span></small></p>
     </section>
-     </section>
 
 <section id="fridge-control">
   <h2>Controls</h2>
@@ -124,6 +122,45 @@
     </button>
     <div id="device-reset-status" style="margin-top: 10px; font-size: 14px;"></div>
   </div>
+</section>
+
+<section id="diagnostics-section">
+  <h2>Diagnostics</h2>
+  <div class="live-values">
+    <div class="temp-card">
+        <div class="temp-card-label">Sump Connection</div>
+        <div class="temp-card-current" id="diag-sump-conn">--</div>
+    </div>
+    <div class="temp-card">
+        <div class="temp-card-label">Sump Dropped Events</div>
+        <div class="temp-card-current" id="diag-sump-dropped">--</div>
+    </div>
+    <div class="temp-card">
+        <div class="temp-card-label">Sump Publish Fails</div>
+        <div class="temp-card-current" id="diag-sump-fails">--</div>
+    </div>
+    <div class="temp-card">
+        <div class="temp-card-label">Sump CSV Freshness</div>
+        <div class="temp-card-current" id="diag-sump-csv-age">--</div>
+    </div>
+    <div class="temp-card">
+        <div class="temp-card-label">Fridge/Freezer Connection</div>
+        <div class="temp-card-current" id="diag-temp-conn">--</div>
+    </div>
+    <div class="temp-card">
+        <div class="temp-card-label">Fridge/Freezer CSV Freshness</div>
+        <div class="temp-card-current" id="diag-temp-csv-age">--</div>
+    </div>
+    <div class="temp-card">
+        <div class="temp-card-label">Weather Cache Age</div>
+        <div class="temp-card-current" id="diag-weather-age">--</div>
+    </div>
+    <div class="temp-card">
+        <div class="temp-card-label">Sump Charts Refreshed</div>
+        <div class="temp-card-current" id="diag-sump-chart-refresh">--</div>
+    </div>
+  </div>
+  <p><small>Last error: <span id="diag-last-error">None</span></small></p>
 </section>
 
 
