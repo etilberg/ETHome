@@ -64,7 +64,7 @@ const MASTER_CACHE_DURATION = 1 * 60 * 60 * 1000; // 1 hours in milliseconds
 // switching providers). A cached entry tagged with an older version is
 // treated as invalid and re-fetched, instead of silently being reused just
 // because it's still within MASTER_CACHE_DURATION.
-const WEATHER_CACHE_VERSION = 'nws-v2';
+const WEATHER_CACHE_VERSION = 'nws-v3';
 
 function calculateMinMax(array) {
   if (!array.length) return { min: null, max: null };
@@ -1053,12 +1053,14 @@ async function fetchMasterWeatherData() {
                     const tempC = p.temperature && p.temperature.value;
                     const tempF = (tempC === null || tempC === undefined) ? null : (tempC * 9 / 5 + 32);
 
-                    // precipitationLastHour is in meters when present; null just
-                    // means "no precip reported this hour" for this station, not
-                    // missing data, so it's treated as 0 -- same fallback the old
-                    // code used.
-                    const precipM = p.precipitationLastHour && p.precipitationLastHour.value;
-                    const precipIn = (precipM === null || precipM === undefined) ? 0 : (precipM * 39.3701);
+                    // precipitationLastHour comes back in millimeters, not
+                    // meters -- confirmed by cross-checking a station's summed
+                    // .value against its raw METAR P-group amounts (hundredths
+                    // of an inch). Null just means "no precip reported this
+                    // hour" for this station, not missing data, so it's
+                    // treated as 0 -- same fallback the old code used.
+                    const precipMm = p.precipitationLastHour && p.precipitationLastHour.value;
+                    const precipIn = (precipMm === null || precipMm === undefined) ? 0 : (precipMm / 25.4);
 
                     weatherDataMap.set(hourTs, { temp: tempF, precip: precipIn });
                 }
