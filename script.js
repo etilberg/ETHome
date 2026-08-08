@@ -110,15 +110,89 @@ function logDiagError(context, error) {
     renderDiagnostics();
 }
 
+// --- Rolling 24h delta tracking for lifetime firmware counters ---
+// publishFails/droppedEvents are cumulative since the device's last boot, so
+// the raw total alone doesn't say much -- what matters is whether it's still
+// climbing. Snapshots are throttled to ~once per 15 min and persisted to
+// localStorage (pruned past 26h) so the 24h window survives page reloads
+// instead of resetting every time the tab is refreshed.
+const COUNTER_HISTORY_STORAGE_KEY = 'sumpCounterHistory';
+const COUNTER_SNAPSHOT_MIN_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+const COUNTER_HISTORY_MAX_AGE_MS = 26 * 60 * 60 * 1000;  // 26 hours (small buffer past 24h)
+
+function loadCounterHistory() {
+    try {
+        const raw = localStorage.getItem(COUNTER_HISTORY_STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+    } catch (error) {
+        console.error("DEBUG: Could not read counter history from localStorage.", error);
+    }
+    return {};
+}
+
+function saveCounterHistory() {
+    try {
+        localStorage.setItem(COUNTER_HISTORY_STORAGE_KEY, JSON.stringify(counterHistory));
+    } catch (error) {
+        console.error("DEBUG: Could not save counter history to localStorage.", error);
+    }
+}
+
+let counterHistory = loadCounterHistory();
+
+// Records a new value for a named lifetime counter (throttled + pruned) and
+// returns a display-ready delta string, e.g. "+120 in 24h". While less than
+// 24h of history has been collected yet, returns a shorter-window delta and
+// says so explicitly rather than showing a misleading "24h" figure.
+function trackCounterDelta(name, currentValue) {
+    if (currentValue === null || currentValue === undefined) return null;
+
+    const now = Date.now();
+    const snapshots = counterHistory[name] || [];
+
+    const last = snapshots[snapshots.length - 1];
+    if (!last || now - last.t >= COUNTER_SNAPSHOT_MIN_INTERVAL_MS) {
+        snapshots.push({ t: now, v: currentValue });
+        while (snapshots.length > 1 && now - snapshots[0].t > COUNTER_HISTORY_MAX_AGE_MS) {
+            snapshots.shift();
+        }
+        counterHistory[name] = snapshots;
+        saveCounterHistory();
+    }
+
+    if (snapshots.length === 0) return null;
+
+    // Baseline = the most recent snapshot at/before 24h ago, if we have one.
+    const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
+    let baseline = null;
+    for (const snap of snapshots) {
+        if (snap.t <= twentyFourHoursAgo) baseline = snap;
+        else break;
+    }
+    if (baseline) {
+        return `+${currentValue - baseline.v} in 24h`;
+    }
+
+    // Not tracking this long yet -- show what we've got and say so.
+    const oldest = snapshots[0];
+    const elapsedHours = (now - oldest.t) / (60 * 60 * 1000);
+    if (elapsedHours < 0.1) return null; // just started tracking, nothing meaningful yet
+    return `+${currentValue - oldest.v} in ${elapsedHours.toFixed(1)}h (still collecting 24h)`;
+}
+
 function renderDiagnostics() {
     if (diagSumpConnElement) diagSumpConnElement.textContent = diagState.sumpConn;
     if (diagSumpDroppedElement) {
-        diagSumpDroppedElement.textContent = diagState.sumpDropped ?? '--';
-        diagSumpDroppedElement.style.color = diagState.sumpDropped > 0 ? '#ff6b6b' : '';
+        const val = diagState.sumpDropped;
+        const delta = trackCounterDelta('droppedEvents', val);
+        diagSumpDroppedElement.textContent = (val ?? '--') + (delta ? ` (${delta})` : '');
+        diagSumpDroppedElement.style.color = val > 0 ? '#ff6b6b' : '';
     }
     if (diagSumpFailsElement) {
-        diagSumpFailsElement.textContent = diagState.sumpFails ?? '--';
-        diagSumpFailsElement.style.color = diagState.sumpFails > 0 ? '#ff6b6b' : '';
+        const val = diagState.sumpFails;
+        const delta = trackCounterDelta('publishFails', val);
+        diagSumpFailsElement.textContent = (val ?? '--') + (delta ? ` (${delta})` : '');
+        diagSumpFailsElement.style.color = val > 0 ? '#ff6b6b' : '';
     }
     if (diagSumpCsvAgeElement) diagSumpCsvAgeElement.textContent = formatAgo(diagState.sumpCsvLatest);
     if (diagTempConnElement) diagTempConnElement.textContent = diagState.tempConn;
