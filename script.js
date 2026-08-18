@@ -64,7 +64,7 @@ const MASTER_CACHE_DURATION = 1 * 60 * 60 * 1000; // 1 hours in milliseconds
 // switching providers). A cached entry tagged with an older version is
 // treated as invalid and re-fetched, instead of silently being reused just
 // because it's still within MASTER_CACHE_DURATION.
-const WEATHER_CACHE_VERSION = 'nws-v3';
+const WEATHER_CACHE_VERSION = 'nws-v4-iemre-precip';
 
 function calculateMinMax(array) {
   if (!array.length) return { min: null, max: null };
@@ -1076,6 +1076,54 @@ function connectSumpMonitorSSE() {
  * The single function responsible for fetching 7 days of weather data from the API.
  * This should only be called by the controller function below.
  */
+// Fetches ~8 days of gridded hourly precip estimates from IEM Reanalysis
+// (mesonet.agron.iastate.edu) -- radar-based Stage IV, bias-corrected against
+// gauge networks -- for our coordinates, and returns Map<hourEpochMs,
+// precipInches>. This is the precip source specifically, replacing KATY's own
+// gauge: that sensor is confirmed out of service (PNO flag in its METARs), so
+// a single broken point instrument isn't usable, but a gridded radar-based
+// estimate isn't dependent on any one station's hardware. Free, no API key.
+async function fetchIemrePrecipData() {
+    console.log("DEBUG: Fetching precip data from IEM Reanalysis (IEMRE).");
+    const precipMap = new Map();
+
+    // IEMRE's hourly endpoint takes one *local* (Central time) calendar day
+    // per request, not a UTC window, so requesting 8 UTC-calendar days back
+    // (instead of exactly 7) gives a small safety margin against day-boundary
+    // mismatches between UTC and Central time -- any overlap is harmless
+    // since entries end up keyed by their actual UTC hour timestamp anyway.
+    for (let i = 0; i < 8; i++) {
+        const day = new Date(Date.now() - i * 24 * 3600000);
+        const dayStr = day.toISOString().split('T')[0];
+        const url = `https://mesonet.agron.iastate.edu/iemre/hourly/${dayStr}/${NWS_LATITUDE}/${NWS_LONGITUDE}/json`;
+
+        try {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP error ${res.status} for day ${dayStr}`);
+            const json = await res.json();
+            const rows = json.data || [];
+
+            for (const row of rows) {
+                if (!row.valid_utc || row.hourly_precip_in === undefined || row.hourly_precip_in === null) continue;
+                const hourTs = Math.floor(new Date(row.valid_utc).getTime() / 3600000) * 3600000;
+                // hourly_precip_in is already in inches -- no unit conversion
+                // needed, which sidesteps the exact class of bug the NWS
+                // mm-vs-meters mixup caused.
+                precipMap.set(hourTs, row.hourly_precip_in);
+            }
+        } catch (dayError) {
+            console.error(`DEBUG: IEMRE precip fetch failed for day ${dayStr}:`, dayError);
+        }
+
+        if (i < 7) {
+            await new Promise(resolve => setTimeout(resolve, 150));
+        }
+    }
+
+    console.log(`DEBUG: IEMRE returned ${precipMap.size} hourly precip buckets.`);
+    return precipMap;
+}
+
 // Fetches ~7 days of hourly station observations from NWS/NOAA and returns
 // them in the exact same shape the rest of the dashboard already expects:
 // Map<hourEpochMs, {temp: °F, precip: inches}>. Keeping that output contract
@@ -1127,16 +1175,10 @@ async function fetchMasterWeatherData() {
                     const tempC = p.temperature && p.temperature.value;
                     const tempF = (tempC === null || tempC === undefined) ? null : (tempC * 9 / 5 + 32);
 
-                    // precipitationLastHour comes back in millimeters, not
-                    // meters -- confirmed by cross-checking a station's summed
-                    // .value against its raw METAR P-group amounts (hundredths
-                    // of an inch). Null just means "no precip reported this
-                    // hour" for this station, not missing data, so it's
-                    // treated as 0 -- same fallback the old code used.
-                    const precipMm = p.precipitationLastHour && p.precipitationLastHour.value;
-                    const precipIn = (precipMm === null || precipMm === undefined) ? 0 : (precipMm / 25.4);
-
-                    weatherDataMap.set(hourTs, { temp: tempF, precip: precipIn });
+                    // Precip itself is filled in separately below from IEMRE
+                    // (KATY's own gauge is confirmed out of service), so it's
+                    // just a placeholder here -- not read from this station.
+                    weatherDataMap.set(hourTs, { temp: tempF, precip: 0 });
                 }
             } catch (dayError) {
                 console.error(`DEBUG: NWS observation fetch failed for day offset ${i}:`, dayError);
@@ -1150,6 +1192,21 @@ async function fetchMasterWeatherData() {
         }
 
         console.log(`DEBUG: NWS station ${stationId} returned ${weatherDataMap.size} hourly buckets across 7 daily requests.`);
+
+        // Merge in precip from IEMRE (radar-based, not dependent on KATY's
+        // broken gauge), overwriting just the precip field per hour bucket
+        // while leaving KATY's temp readings untouched. If an hour has an
+        // IEMRE precip value but no KATY temp entry (a gap in KATY's own
+        // reporting), still record it so precip isn't silently dropped.
+        const precipMap = await fetchIemrePrecipData();
+        for (const [hourTs, precipIn] of precipMap.entries()) {
+            const existing = weatherDataMap.get(hourTs);
+            if (existing) {
+                existing.precip = precipIn;
+            } else {
+                weatherDataMap.set(hourTs, { temp: null, precip: precipIn });
+            }
+        }
     } catch (error) {
         console.error("DEBUG: NWS master weather fetch failed:", error);
         diagState.lastError = `${new Date().toLocaleTimeString()} - NWS weather fetch: ${error.message}`;
