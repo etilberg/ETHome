@@ -19,7 +19,7 @@
         <div id="current-details">
             <div id="current-condition">--</div>
             <div id="high-low">H: <span class="temp-high">--</span>° / L: <span class="temp-low">--</span>°</div>
-            <div id="wind-speed">Wind: -- mph</div>
+            <div id="wind-speed">Wind: <span id="wind-speed-value">--</span> mph <span id="wind-direction"></span></div>
             <div id="humidity">Humidity: --%</div>
             <div id="feels-like">Feels like: --°</div>
             <div id="tomorrow-forecast">Tomorrow: H: --° / L: --°</div>
@@ -34,6 +34,9 @@
         <h2>KATY Station Detail (<span id="katy-weather-status">Initializing...</span>)</h2>
         <div class="chart-container chart-container-large">
             <canvas id="katyWeatherChart"></canvas>
+        </div>
+        <div class="chart-container chart-container-large">
+            <canvas id="katyWindChart"></canvas>
         </div>
         <p><small>Last updated: <span id="katy-weather-last-updated">Never</span></small></p>
     </section>
