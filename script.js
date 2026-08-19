@@ -58,6 +58,7 @@ let fridgeChartInstance, freezerChartInstance, garageChartInstance;
 let sumpTempChartInstance, sumpRuntimeChartInstance, sumpSinceRunChartInstance;
 let sumpRunsPerDayChartInstance;
 let katyWeatherChartInstance;
+let katyWindChartInstance;
 
 // A single, unified cache for all weather station data
 let masterWeatherCache = {
@@ -423,11 +424,30 @@ async function refreshKatyWeatherChart(rangeHours) {
         katyWeatherChartInstance.data.labels = points.map(p => new Date(p.t));
         katyWeatherChartInstance.data.datasets[0].data = points.map(p => p.temp);
         katyWeatherChartInstance.data.datasets[1].data = points.map(p => p.humidity);
-        katyWeatherChartInstance.data.datasets[2].data = points.map(p => p.windSpeed);
-        katyWeatherChartInstance.data.datasets[3].data = points.map(p => p.windGust);
-        katyWeatherChartInstance.data.datasets[4].data = points.map(p => p.windDir);
-        katyWeatherChartInstance.data.datasets[5].data = points.map(p => p.pressure);
+        katyWeatherChartInstance.data.datasets[2].data = points.map(p => p.pressure);
         katyWeatherChartInstance.update();
+    }
+
+    if (katyWindChartInstance) {
+        katyWindChartInstance.data.labels = points.map(p => new Date(p.t));
+        katyWindChartInstance.data.datasets[0].data = points.map(p => p.windSpeed);
+        katyWindChartInstance.data.datasets[1].data = points.map(p => p.windGust);
+
+        // Direction markers: at most one per hour, regardless of the chart's
+        // overall resolution, so the graph doesn't get cluttered with an
+        // arrow at every 5-min point. Each marker sits at {x: time, y: that
+        // hour's wind speed} so it visually rides the speed line, using the
+        // existing mph axis rather than a separate 0-360 one.
+        const hourlyDirPoints = sampleOnePerHour(points.filter(p => p.windDir !== null && p.windSpeed !== null));
+        katyWindChartInstance.data.datasets[2].data = hourlyDirPoints.map(p => ({ x: p.t, y: p.windSpeed }));
+        // Chart.js rotates the 'triangle' point style clockwise from
+        // pointing straight up (0deg = north). windDir is the compass
+        // bearing the wind is blowing FROM (standard meteorological
+        // convention), so rotating by windDir+180 makes the arrow point in
+        // the direction the wind is actually blowing TOWARD.
+        katyWindChartInstance.data.datasets[2].pointRotation = hourlyDirPoints.map(p => (p.windDir + 180) % 360);
+
+        katyWindChartInstance.update();
     }
 
     if (katyWeatherStatusElement) {
@@ -437,7 +457,29 @@ async function refreshKatyWeatherChart(rangeHours) {
         katyWeatherLastUpdatedElement.textContent = new Date().toLocaleTimeString();
     }
 
-    console.log(`DEBUG: KATY weather detail chart updated with ${points.length} points for ${rangeHours}h range.`);
+    console.log(`DEBUG: KATY weather detail charts updated with ${points.length} points for ${rangeHours}h range.`);
+}
+
+// Collapses a time-sorted array of {t, ...} points down to at most one per
+// hour (the latest reading within each hour), used to keep sparse overlays
+// like the wind-direction markers from getting cluttered at fine resolutions.
+function sampleOnePerHour(points) {
+    const hourly = new Map();
+    for (const p of points) {
+        const hourTs = Math.floor(p.t / 3600000) * 3600000;
+        const existing = hourly.get(hourTs);
+        if (!existing || p.t > existing.t) hourly.set(hourTs, p);
+    }
+    return Array.from(hourly.keys()).sort((a, b) => a - b).map(k => hourly.get(k));
+}
+
+// Converts a compass bearing in degrees to a 16-point abbreviation (N, NNE,
+// NE, ...). Used for the current-conditions wind readout.
+function degToCompass(deg) {
+    if (deg === null || deg === undefined) return null;
+    const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+    const index = Math.round(deg / 22.5) % 16;
+    return directions[index];
 }
 
 // --- Function to Fetch and Display Current Weather ---
@@ -470,6 +512,7 @@ async function displayCurrentWeather() {
 
         const currentTemp = cToF(obs.temperature && obs.temperature.value);
         const windSpeed = kmhToMph(obs.windSpeed && obs.windSpeed.value);
+        const windDirCompass = degToCompass(obs.windDirection && obs.windDirection.value);
         const humidity = (obs.relativeHumidity && obs.relativeHumidity.value != null) ? Math.round(obs.relativeHumidity.value) : null;
         const feelsLikeC = (obs.heatIndex && obs.heatIndex.value) ?? (obs.windChill && obs.windChill.value) ?? (obs.temperature && obs.temperature.value);
         const feelsLike = cToF(feelsLikeC);
@@ -489,7 +532,8 @@ async function displayCurrentWeather() {
         document.getElementById('current-temp').textContent = currentTemp !== null ? `${currentTemp}°F` : '--°F';
         document.getElementById('current-condition').textContent = conditions;
         document.getElementById('high-low').innerHTML = `H: <span class="temp-high">${dailyHigh ?? '--'}°</span> / L: <span class="temp-low">${dailyLow ?? '--'}°</span>`;
-        document.getElementById('wind-speed').textContent = `Wind: ${windSpeed !== null ? windSpeed : '--'} mph`;
+        document.getElementById('wind-speed-value').textContent = windSpeed !== null ? windSpeed : '--';
+        document.getElementById('wind-direction').textContent = windDirCompass ? `from ${windDirCompass}` : '';
         document.getElementById('forecast-synopsis').querySelector('p').textContent = synopsis;
         document.getElementById('humidity').textContent = `Humidity: ${humidity !== null ? humidity : '--'}%`;
         document.getElementById('feels-like').textContent = `Feels like: ${feelsLike !== null ? feelsLike : '--'}°`;
@@ -670,12 +714,12 @@ if (sumpRunsPerDayChartInstance) {
     sumpRunsPerDayChartInstance.update();
 }
 
-    // ======================= INITIALIZE THE KATY WEATHER DETAIL CHART =======================
-    // Combined temp/humidity/wind/pressure chart at KATY's native ~5-min
-    // resolution (hourly, top-of-the-hour values, for the 1-week range --
-    // see fetchKatyWeatherDetail). Separate from the precip fix: this stays
-    // on raw NWS/KATY observations since temp/humidity/wind/pressure there
-    // have never shown a problem, unlike KATY's broken precip sensor.
+    // ======================= INITIALIZE THE KATY WEATHER DETAIL CHARTS =======================
+    // Temp/humidity/pressure at KATY's native ~5-min resolution (hourly,
+    // top-of-the-hour values, for the 1-week range -- see
+    // fetchKatyWeatherDetail). Separate from the precip fix: this stays on
+    // raw NWS/KATY observations since none of these fields have shown a
+    // problem, unlike KATY's broken precip sensor.
     const katyWeatherCtx = document.getElementById('katyWeatherChart')?.getContext('2d');
     if (katyWeatherCtx) {
         katyWeatherChartInstance = new Chart(katyWeatherCtx, {
@@ -685,9 +729,6 @@ if (sumpRunsPerDayChartInstance) {
                 datasets: [
                     { label: 'Temp (°F)', data: [], borderColor: 'rgb(255, 99, 132)', yAxisID: 'y_temp', pointRadius: 0, borderWidth: 2, tension: 0.1 },
                     { label: 'Humidity (%)', data: [], borderColor: 'rgb(54, 162, 235)', yAxisID: 'y_humidity', pointRadius: 0, borderWidth: 2, tension: 0.1 },
-                    { label: 'Wind Speed (mph)', data: [], borderColor: 'rgb(75, 192, 192)', yAxisID: 'y_wind', pointRadius: 0, borderWidth: 2, tension: 0.1 },
-                    { label: 'Wind Gusts (mph)', data: [], borderColor: 'rgb(255, 159, 64)', yAxisID: 'y_wind', pointRadius: 0, borderWidth: 1, borderDash: [4, 4], tension: 0.1 },
-                    { label: 'Wind Direction (°)', data: [], borderColor: 'rgb(153, 102, 255)', yAxisID: 'y_dir', pointRadius: 1, borderWidth: 0, showLine: false },
                     { label: 'Pressure (inHg)', data: [], borderColor: 'rgb(201, 203, 207)', yAxisID: 'y_pressure', pointRadius: 0, borderWidth: 2, tension: 0.1 }
                 ]
             },
@@ -704,16 +745,6 @@ if (sumpRunsPerDayChartInstance) {
                     y_humidity: {
                         type: 'linear', position: 'right', min: 0, max: 100,
                         title: { display: true, text: 'Humidity (%)' },
-                        grid: { drawOnChartArea: false }
-                    },
-                    y_wind: {
-                        type: 'linear', position: 'left', min: 0, offset: true,
-                        title: { display: true, text: 'Wind (mph)' },
-                        grid: { drawOnChartArea: false }
-                    },
-                    y_dir: {
-                        type: 'linear', position: 'right', min: 0, max: 360, offset: true,
-                        title: { display: true, text: 'Wind Dir (°)' },
                         grid: { drawOnChartArea: false }
                     },
                     y_pressure: {
@@ -733,6 +764,50 @@ if (sumpRunsPerDayChartInstance) {
         });
         // Double-click to reset pan/zoom back to the full range
         document.getElementById('katyWeatherChart').addEventListener('dblclick', () => katyWeatherChartInstance.resetZoom());
+    }
+
+    // Wind: Speed + Gusts as lines, Direction as sparse rotated triangle
+    // markers sitting directly on the speed line (one per hour, regardless
+    // of the chart's overall resolution, so it doesn't get busy) -- no
+    // separate 0-360 axis needed since the markers use the same mph scale.
+    const katyWindCtx = document.getElementById('katyWindChart')?.getContext('2d');
+    if (katyWindCtx) {
+        katyWindChartInstance = new Chart(katyWindCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'Wind Speed (mph)', data: [], borderColor: 'rgb(75, 192, 192)', yAxisID: 'y_wind', pointRadius: 0, borderWidth: 2, tension: 0.1 },
+                    { label: 'Wind Gusts (mph)', data: [], borderColor: 'rgb(255, 159, 64)', yAxisID: 'y_wind', pointRadius: 0, borderWidth: 1, borderDash: [4, 4], tension: 0.1 },
+                    {
+                        label: 'Wind Direction', data: [], yAxisID: 'y_wind',
+                        showLine: false, parsing: false,
+                        pointStyle: 'triangle', pointRadius: 6, pointRotation: [],
+                        borderColor: 'rgb(153, 102, 255)', backgroundColor: 'rgb(153, 102, 255)'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'nearest', axis: 'x', intersect: false },
+                scales: {
+                    x: { type: 'time' },
+                    y_wind: {
+                        type: 'linear', position: 'left', min: 0,
+                        title: { display: true, text: 'Wind (mph)' }
+                    }
+                },
+                plugins: {
+                    legend: { display: true },
+                    zoom: {
+                        pan: { enabled: true, mode: 'x' },
+                        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+                    }
+                }
+            }
+        });
+        document.getElementById('katyWindChart').addEventListener('dblclick', () => katyWindChartInstance.resetZoom());
     }
 
     // Start SSE connections
