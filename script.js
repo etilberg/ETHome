@@ -30,6 +30,10 @@ const diagWeatherAgeElement = document.getElementById('diag-weather-age');
 const diagSumpChartRefreshElement = document.getElementById('diag-sump-chart-refresh');
 const diagLastErrorElement = document.getElementById('diag-last-error');
 
+// KATY Weather Detail (Temp/Humidity/Wind/Pressure) Elements
+const katyWeatherStatusElement = document.getElementById('katy-weather-status');
+const katyWeatherLastUpdatedElement = document.getElementById('katy-weather-last-updated');
+
 // --- Data Storage ---
 let timeHistory = [];
 let fridgeHistory = [];
@@ -52,7 +56,8 @@ const SUMP_CHART_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 // --- Chart Instance Variables ---
 let fridgeChartInstance, freezerChartInstance, garageChartInstance;
 let sumpTempChartInstance, sumpRuntimeChartInstance, sumpSinceRunChartInstance;
-let sumpRunsPerDayChartInstance; 
+let sumpRunsPerDayChartInstance;
+let katyWeatherChartInstance;
 
 // A single, unified cache for all weather station data
 let masterWeatherCache = {
@@ -313,6 +318,128 @@ async function resolveNwsStation() {
     return nwsStationResolutionPromise;
 }
 
+// --- KATY Weather Detail (Temp/Humidity/Wind/Pressure) ---
+// Separate from the precip fix -- this stays on raw NWS/KATY station
+// observations at their native ~5-minute cadence, since temp/humidity/wind/
+// pressure there have never shown a problem (only KATY's precip sensor did).
+// For the 1-week range, collapses to one point per hour (latest reading
+// within each hour, i.e. a "top of the hour" value) to keep the chart
+// readable and the point count small, per the chosen approach.
+async function fetchKatyWeatherDetail(rangeHours) {
+    console.log(`DEBUG: Fetching KATY weather detail (temp/humidity/wind/pressure) for last ${rangeHours} hours.`);
+    try {
+        const stationId = await resolveNwsStation();
+        if (!stationId) throw new Error("No NWS station resolved");
+
+        // Day-chunked requests, same reasoning as fetchMasterWeatherData: a
+        // single wide request can silently cap out at however many records
+        // the API returns per call. Only fetch as many days as the selected
+        // range actually needs (plus one for safety margin).
+        const daysNeeded = Math.min(8, Math.ceil(rangeHours / 24) + 1);
+        const rawObs = [];
+
+        for (let i = 0; i < daysNeeded; i++) {
+            const dayEnd = new Date(Date.now() - i * 24 * 3600000);
+            const dayStart = new Date(dayEnd.getTime() - 24 * 3600000);
+            const url = `https://api.weather.gov/stations/${stationId}/observations?start=${dayStart.toISOString()}&end=${dayEnd.toISOString()}&limit=500`;
+
+            try {
+                const res = await fetch(url, { headers: { 'Accept': 'application/geo+json' } });
+                if (!res.ok) throw new Error(`HTTP error ${res.status} for day offset ${i}`);
+                const json = await res.json();
+                const features = json.features || [];
+
+                for (const feature of features) {
+                    const p = feature.properties || {};
+                    if (!p.timestamp) continue;
+                    const t = new Date(p.timestamp).getTime();
+
+                    const tempC = p.temperature && p.temperature.value;
+                    const temp = (tempC === null || tempC === undefined) ? null : (tempC * 9 / 5 + 32);
+
+                    const humidity = (p.relativeHumidity && p.relativeHumidity.value != null) ? p.relativeHumidity.value : null;
+
+                    const windSpeedKmh = p.windSpeed && p.windSpeed.value;
+                    const windSpeed = (windSpeedKmh === null || windSpeedKmh === undefined) ? null : (windSpeedKmh * 0.621371);
+
+                    const windGustKmh = p.windGust && p.windGust.value;
+                    const windGust = (windGustKmh === null || windGustKmh === undefined) ? null : (windGustKmh * 0.621371);
+
+                    const windDir = (p.windDirection && p.windDirection.value != null) ? p.windDirection.value : null;
+
+                    // Prefer station-level barometric pressure; fall back to
+                    // sea-level pressure if that's all this observation has.
+                    const pressurePa = (p.barometricPressure && p.barometricPressure.value != null)
+                        ? p.barometricPressure.value
+                        : (p.seaLevelPressure && p.seaLevelPressure.value);
+                    const pressure = (pressurePa === null || pressurePa === undefined) ? null : (pressurePa / 3386.39);
+
+                    rawObs.push({ t, temp, humidity, windSpeed, windGust, windDir, pressure });
+                }
+            } catch (dayError) {
+                console.error(`DEBUG: KATY weather-detail fetch failed for day offset ${i}:`, dayError);
+            }
+
+            if (i < daysNeeded - 1) {
+                await new Promise(resolve => setTimeout(resolve, 150));
+            }
+        }
+
+        rawObs.sort((a, b) => a.t - b.t);
+
+        const cutoff = Date.now() - rangeHours * 3600000;
+        const inRange = rawObs.filter(o => o.t >= cutoff);
+
+        if (rangeHours > 48) {
+            // Wide ranges (1 week): collapse to one point per hour, keeping
+            // the latest observation within each hour.
+            const hourly = new Map();
+            for (const o of inRange) {
+                const hourTs = Math.floor(o.t / 3600000) * 3600000;
+                const existing = hourly.get(hourTs);
+                if (!existing || o.t > existing.t) hourly.set(hourTs, o);
+            }
+            const sortedKeys = Array.from(hourly.keys()).sort((a, b) => a - b);
+            return sortedKeys.map(k => hourly.get(k));
+        }
+
+        // Native ~5-minute resolution for shorter ranges
+        return inRange;
+    } catch (error) {
+        console.error("DEBUG: KATY weather detail fetch failed:", error);
+        logDiagError("KATY weather detail fetch", error);
+        return [];
+    }
+}
+
+async function refreshKatyWeatherChart(rangeHours) {
+    if (katyWeatherStatusElement) {
+        katyWeatherStatusElement.textContent = "Fetching...";
+    }
+
+    const points = await fetchKatyWeatherDetail(rangeHours);
+
+    if (katyWeatherChartInstance) {
+        katyWeatherChartInstance.data.labels = points.map(p => new Date(p.t));
+        katyWeatherChartInstance.data.datasets[0].data = points.map(p => p.temp);
+        katyWeatherChartInstance.data.datasets[1].data = points.map(p => p.humidity);
+        katyWeatherChartInstance.data.datasets[2].data = points.map(p => p.windSpeed);
+        katyWeatherChartInstance.data.datasets[3].data = points.map(p => p.windGust);
+        katyWeatherChartInstance.data.datasets[4].data = points.map(p => p.windDir);
+        katyWeatherChartInstance.data.datasets[5].data = points.map(p => p.pressure);
+        katyWeatherChartInstance.update();
+    }
+
+    if (katyWeatherStatusElement) {
+        katyWeatherStatusElement.textContent = points.length > 0 ? `Loaded ${points.length} points` : "No data";
+    }
+    if (katyWeatherLastUpdatedElement) {
+        katyWeatherLastUpdatedElement.textContent = new Date().toLocaleTimeString();
+    }
+
+    console.log(`DEBUG: KATY weather detail chart updated with ${points.length} points for ${rangeHours}h range.`);
+}
+
 // --- Function to Fetch and Display Current Weather ---
 async function displayCurrentWeather() {
     if (typeof NWS_LATITUDE === 'undefined' || typeof NWS_LONGITUDE === 'undefined') {
@@ -542,6 +669,72 @@ if (sumpRunsPerDayChartInstance) {
 
     sumpRunsPerDayChartInstance.update();
 }
+
+    // ======================= INITIALIZE THE KATY WEATHER DETAIL CHART =======================
+    // Combined temp/humidity/wind/pressure chart at KATY's native ~5-min
+    // resolution (hourly, top-of-the-hour values, for the 1-week range --
+    // see fetchKatyWeatherDetail). Separate from the precip fix: this stays
+    // on raw NWS/KATY observations since temp/humidity/wind/pressure there
+    // have never shown a problem, unlike KATY's broken precip sensor.
+    const katyWeatherCtx = document.getElementById('katyWeatherChart')?.getContext('2d');
+    if (katyWeatherCtx) {
+        katyWeatherChartInstance = new Chart(katyWeatherCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'Temp (°F)', data: [], borderColor: 'rgb(255, 99, 132)', yAxisID: 'y_temp', pointRadius: 0, borderWidth: 2, tension: 0.1 },
+                    { label: 'Humidity (%)', data: [], borderColor: 'rgb(54, 162, 235)', yAxisID: 'y_humidity', pointRadius: 0, borderWidth: 2, tension: 0.1 },
+                    { label: 'Wind Speed (mph)', data: [], borderColor: 'rgb(75, 192, 192)', yAxisID: 'y_wind', pointRadius: 0, borderWidth: 2, tension: 0.1 },
+                    { label: 'Wind Gusts (mph)', data: [], borderColor: 'rgb(255, 159, 64)', yAxisID: 'y_wind', pointRadius: 0, borderWidth: 1, borderDash: [4, 4], tension: 0.1 },
+                    { label: 'Wind Direction (°)', data: [], borderColor: 'rgb(153, 102, 255)', yAxisID: 'y_dir', pointRadius: 1, borderWidth: 0, showLine: false },
+                    { label: 'Pressure (inHg)', data: [], borderColor: 'rgb(201, 203, 207)', yAxisID: 'y_pressure', pointRadius: 0, borderWidth: 2, tension: 0.1 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'nearest', axis: 'x', intersect: false },
+                scales: {
+                    x: { type: 'time' },
+                    y_temp: {
+                        type: 'linear', position: 'left',
+                        title: { display: true, text: 'Temp (°F)' }
+                    },
+                    y_humidity: {
+                        type: 'linear', position: 'right', min: 0, max: 100,
+                        title: { display: true, text: 'Humidity (%)' },
+                        grid: { drawOnChartArea: false }
+                    },
+                    y_wind: {
+                        type: 'linear', position: 'left', min: 0, offset: true,
+                        title: { display: true, text: 'Wind (mph)' },
+                        grid: { drawOnChartArea: false }
+                    },
+                    y_dir: {
+                        type: 'linear', position: 'right', min: 0, max: 360, offset: true,
+                        title: { display: true, text: 'Wind Dir (°)' },
+                        grid: { drawOnChartArea: false }
+                    },
+                    y_pressure: {
+                        type: 'linear', position: 'right', offset: true,
+                        title: { display: true, text: 'Pressure (inHg)' },
+                        grid: { drawOnChartArea: false }
+                    }
+                },
+                plugins: {
+                    legend: { display: true },
+                    zoom: {
+                        pan: { enabled: true, mode: 'x' },
+                        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+                    }
+                }
+            }
+        });
+        // Double-click to reset pan/zoom back to the full range
+        document.getElementById('katyWeatherChart').addEventListener('dblclick', () => katyWeatherChartInstance.resetZoom());
+    }
+
     // Start SSE connections
     connectTempMonitorSSE();
     connectSumpMonitorSSE();
@@ -551,6 +744,7 @@ if (sumpRunsPerDayChartInstance) {
     currentSumpRangeHours = initialHours;
     fetchTempMonitorHistoricalData(initialHours);
     fetchSumpHistoricalData(initialHours); 
+    refreshKatyWeatherChart(initialHours);
     
     // ======================= CALL THE NEW ANALYTICS FETCH =======================
     fetchSumpAnalyticsData();
@@ -577,6 +771,7 @@ document.getElementById('history-range').addEventListener('change', function() {
     currentSumpRangeHours = selectedHours;
     fetchTempMonitorHistoricalData(selectedHours); // Renamed function
     fetchSumpHistoricalData(selectedHours);      // New function
+    refreshKatyWeatherChart(selectedHours);
 });
 
 function fetchTempMonitorHistoricalData(rangeHours = 1) {
