@@ -440,12 +440,13 @@ async function refreshKatyWeatherChart(rangeHours) {
         // existing mph axis rather than a separate 0-360 one.
         const hourlyDirPoints = sampleOnePerHour(points.filter(p => p.windDir !== null && p.windSpeed !== null));
         katyWindChartInstance.data.datasets[2].data = hourlyDirPoints.map(p => ({ x: p.t, y: p.windSpeed }));
-        // Chart.js rotates the 'triangle' point style clockwise from
-        // pointing straight up (0deg = north). windDir is the compass
-        // bearing the wind is blowing FROM (standard meteorological
-        // convention), so rotating by windDir+180 makes the arrow point in
-        // the direction the wind is actually blowing TOWARD.
-        katyWindChartInstance.data.datasets[2].pointRotation = hourlyDirPoints.map(p => (p.windDir + 180) % 360);
+        // windDir is the compass bearing the wind is blowing FROM (standard
+        // meteorological convention), so rotating the icon by windDir+180
+        // makes the arrow point in the direction the wind is actually
+        // blowing TOWARD. Each icon is pre-rendered already rotated (see
+        // createWindArrowIcon), rather than using Chart.js's pointRotation
+        // on a built-in shape.
+        katyWindChartInstance.data.datasets[2].pointStyle = hourlyDirPoints.map(p => createWindArrowIcon((p.windDir + 180) % 360));
 
         katyWindChartInstance.update();
     }
@@ -471,6 +472,42 @@ function sampleOnePerHour(points) {
         if (!existing || p.t > existing.t) hourly.set(hourTs, p);
     }
     return Array.from(hourly.keys()).sort((a, b) => a - b).map(k => hourly.get(k));
+}
+
+// Draws a small open-chevron arrow (shaft + "^" head, like the shapes
+// requested: <, ^, > depending on rotation) on an offscreen canvas, rotated
+// by rotationDeg, for use as a Chart.js point style. Chart.js's built-in
+// point styles (triangle, etc.) are filled/symmetric and don't read clearly
+// as "pointing" in a direction -- an explicit arrow shape does.
+// rotationDeg: 0 = pointing straight up, clockwise from there.
+function createWindArrowIcon(rotationDeg, color = 'rgb(153, 102, 255)') {
+    const size = 20;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.translate(size / 2, size / 2);
+    ctx.rotate((rotationDeg * Math.PI) / 180);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Shaft
+    ctx.beginPath();
+    ctx.moveTo(0, 7);
+    ctx.lineTo(0, -6);
+    ctx.stroke();
+
+    // Open chevron head at the tip (the shape reads as ^ / > / < depending
+    // on rotation, rather than a filled, harder-to-read triangle)
+    ctx.beginPath();
+    ctx.moveTo(-5, -1);
+    ctx.lineTo(0, -8);
+    ctx.lineTo(5, -1);
+    ctx.stroke();
+
+    return canvas;
 }
 
 // Converts a compass bearing in degrees to a 16-point abbreviation (N, NNE,
@@ -525,8 +562,6 @@ async function displayCurrentWeather() {
         const nighttimePeriods = periods.filter(p => !p.isDaytime);
         const dailyHigh = daytimePeriods[0] ? daytimePeriods[0].temperature : null;
         const dailyLow = nighttimePeriods[0] ? nighttimePeriods[0].temperature : null;
-        const tomorrowHigh = daytimePeriods[1] ? daytimePeriods[1].temperature : null;
-        const tomorrowLow = nighttimePeriods[1] ? nighttimePeriods[1].temperature : null;
         const synopsis = (daytimePeriods[0] || periods[0] || {}).detailedForecast || '--';
 
         document.getElementById('current-temp').textContent = currentTemp !== null ? `${currentTemp}°F` : '--°F';
@@ -537,7 +572,46 @@ async function displayCurrentWeather() {
         document.getElementById('forecast-synopsis').querySelector('p').textContent = synopsis;
         document.getElementById('humidity').textContent = `Humidity: ${humidity !== null ? humidity : '--'}%`;
         document.getElementById('feels-like').textContent = `Feels like: ${feelsLike !== null ? feelsLike : '--'}°`;
-        document.getElementById('tomorrow-forecast').textContent = `Tomorrow: H: ${tomorrowHigh ?? '--'}° / L: ${tomorrowLow ?? '--'}°`;
+
+        // Current-conditions icon -- NWS hosts these directly, so no local
+        // icon set/mapping to maintain.
+        const currentIconEl = document.getElementById('current-icon');
+        if (currentIconEl) {
+            if (obs.icon) {
+                currentIconEl.src = obs.icon;
+                currentIconEl.alt = conditions;
+                currentIconEl.style.display = '';
+            } else {
+                currentIconEl.style.display = 'none';
+            }
+        }
+
+        // Wind vane: rotate the needle to the compass bearing the wind is
+        // blowing FROM (standard wind-vane convention), drawn pointing at N
+        // (0deg) at rest. Calm/variable wind (no direction value) just
+        // leaves the needle at rest with no label.
+        const windDirDeg = obs.windDirection && obs.windDirection.value;
+        const needleEl = document.getElementById('wind-vane-needle');
+        const vaneLabelEl = document.getElementById('wind-vane-label');
+        if (needleEl) {
+            needleEl.setAttribute('transform', `rotate(${windDirDeg ?? 0} 50 50)`);
+        }
+        if (vaneLabelEl) {
+            vaneLabelEl.textContent = windDirCompass ? `${windDirCompass} ${windSpeed ?? '--'} mph` : '';
+        }
+
+        // Forecast strip: 5 days/nights (10 periods) with icons, per period.
+        const forecastStripEl = document.getElementById('forecast-strip');
+        if (forecastStripEl) {
+            forecastStripEl.innerHTML = periods.slice(0, 10).map(p => `
+                <div class="forecast-card">
+                    <div class="forecast-card-label">${p.name}</div>
+                    ${p.icon ? `<img src="${p.icon}" alt="${p.shortForecast || ''}">` : ''}
+                    <div class="forecast-card-temp">${p.temperature ?? '--'}°</div>
+                    <div class="forecast-card-short">${p.shortForecast || ''}</div>
+                </div>
+            `).join('');
+        }
 
     } catch (error) {
         console.error("Could not fetch current weather from NWS:", error);
@@ -782,7 +856,12 @@ if (sumpRunsPerDayChartInstance) {
                     {
                         label: 'Wind Direction', data: [], yAxisID: 'y_wind',
                         showLine: false, parsing: false,
-                        pointStyle: 'triangle', pointRadius: 6, pointRotation: [],
+                        // pointStyle is set per-point in refreshKatyWeatherChart
+                        // to pre-rotated custom arrow icons (see
+                        // createWindArrowIcon) -- Chart.js's built-in point
+                        // styles (triangle, etc.) are filled/symmetric shapes
+                        // that don't read clearly as "pointing" in a direction.
+                        pointStyle: [], pointRadius: 9,
                         borderColor: 'rgb(153, 102, 255)', backgroundColor: 'rgb(153, 102, 255)'
                     }
                 ]
