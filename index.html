@@ -8,13 +8,18 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/moment@^2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@^1"></script>
-    <!-- Zoom plugin (must be after Chart.js) -->
+    <!-- Hammer.js: required by the zoom plugin for drag/touch panning (mouse
+         wheel zoom works without it, which is why zoom worked but pan didn't
+         until this was added). Must load before the zoom plugin below. -->
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+    <!-- Zoom plugin (must be after Chart.js and Hammer.js) -->
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
 
 </head>
 <body>
     <div id="weather-display-container">
     <div id="current-weather">
+        <img id="current-icon" class="weather-icon" src="" alt="" />
         <div id="current-temp">--°F</div>
         <div id="current-details">
             <div id="current-condition">--</div>
@@ -22,16 +27,32 @@
             <div id="wind-speed">Wind: <span id="wind-speed-value">--</span> mph <span id="wind-direction"></span></div>
             <div id="humidity">Humidity: --%</div>
             <div id="feels-like">Feels like: --°</div>
-            <div id="tomorrow-forecast">Tomorrow: H: --° / L: --°</div>
+        </div>
+        <div id="wind-vane-container">
+            <svg id="wind-vane" viewBox="0 0 100 100" width="90" height="90">
+                <circle cx="50" cy="50" r="45" fill="none" stroke="#555" stroke-width="1"/>
+                <text x="50" y="13" text-anchor="middle" fill="#90caf9" font-size="11">N</text>
+                <text x="90" y="54" text-anchor="middle" fill="#90caf9" font-size="11">E</text>
+                <text x="50" y="97" text-anchor="middle" fill="#90caf9" font-size="11">S</text>
+                <text x="10" y="54" text-anchor="middle" fill="#90caf9" font-size="11">W</text>
+                <!-- Needle rotated by JS to point toward the compass bearing
+                     the wind is blowing FROM (standard wind-vane convention).
+                     Drawn pointing at N (0deg) at rest. -->
+                <g id="wind-vane-needle" transform="rotate(0 50 50)">
+                    <polygon points="50,15 45,50 50,44 55,50" fill="rgb(153,102,255)"/>
+                </g>
+            </svg>
+            <div id="wind-vane-label"></div>
         </div>
     </div>
     <div id="forecast-synopsis">
         <p>--</p>
     </div>
+    <div id="forecast-strip"></div>
     </div>
 
     <section id="katy-weather-section">
-        <h2>KATY Station Detail (<span id="katy-weather-status">Initializing...</span>)</h2>
+        <h2>Weather History (<span id="katy-weather-status">Initializing...</span>)</h2>
         <div class="chart-container chart-container-large">
             <canvas id="katyWeatherChart"></canvas>
         </div>
