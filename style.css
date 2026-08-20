@@ -173,7 +173,14 @@ small {
 }
 #wind-vane-needle {
     transition: transform 0.5s ease-out;
-    transform-origin: 50%;
+    /* Resolve the percentage origin against the SVG's own viewBox (0 0 100
+       100) rather than this element's own shape bounding box -- without
+       this, 50% means "center of the needle polygon's tiny bounding box"
+       (near the top of the circle), not the compass center, so rotating by
+       a real angle swings the needle out past the visible viewBox instead
+       of turning in place. */
+    transform-box: view-box;
+    transform-origin: 50% 50%;
 }
 #forecast-synopsis p {
     font-size: 0.9em;
