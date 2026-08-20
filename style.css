@@ -173,7 +173,7 @@ small {
 }
 #wind-vane-needle {
     transition: transform 0.5s ease-out;
-    transform-origin: 50px 50px;
+    transform-origin: 50%;
 }
 #forecast-synopsis p {
     font-size: 0.9em;

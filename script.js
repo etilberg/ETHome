@@ -594,7 +594,12 @@ async function displayCurrentWeather() {
         const needleEl = document.getElementById('wind-vane-needle');
         const vaneLabelEl = document.getElementById('wind-vane-label');
         if (needleEl) {
-            needleEl.setAttribute('transform', `rotate(${windDirDeg ?? 0} 50 50)`);
+            // Set the CSS transform *property* (not the SVG transform
+            // attribute) -- the transition: transform rule on this element
+            // makes the browser prefer the CSS property, which defaults to
+            // none if never set via CSS, silently overriding an
+            // attribute-based rotation and leaving the needle stuck at rest.
+            needleEl.style.transform = `rotate(${windDirDeg ?? 0}deg)`;
         }
         if (vaneLabelEl) {
             vaneLabelEl.textContent = windDirCompass ? `${windDirCompass} ${windSpeed ?? '--'} mph` : '';
