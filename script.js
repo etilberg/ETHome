@@ -40,7 +40,6 @@ let fridgeHistory = [];
 let freezerHistory = [];
 let garageHistory = [];
 let heaterStatusHistory = [];
-let outdoorTempHistory = [];
 
 let sumpTimeHistory = [];
 let sumpTempHistory = [];
@@ -259,15 +258,15 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
                 },
                 zoom: {
                     pan: {
-                        enabled: true,
+                        enabled: false,
                         mode: 'x'
                     },
                     zoom: {
                         wheel: {
-                            enabled: true
+                            enabled: false
                         },
                         pinch: {
-                            enabled: true
+                            enabled: false
                         },
                         mode: 'x'
                     }
@@ -422,10 +421,22 @@ async function refreshKatyWeatherChart(rangeHours) {
 
     if (katyWeatherChartInstance) {
         katyWeatherChartInstance.data.labels = points.map(p => new Date(p.t));
-        katyWeatherChartInstance.data.datasets[0].data = points.map(p => p.temp);
-        katyWeatherChartInstance.data.datasets[1].data = points.map(p => p.humidity);
-        katyWeatherChartInstance.data.datasets[2].data = points.map(p => p.pressure);
+        katyWeatherChartInstance.data.datasets[0].data = points.map(p => p.humidity);
+        katyWeatherChartInstance.data.datasets[1].data = points.map(p => p.pressure);
         katyWeatherChartInstance.update();
+    }
+
+    // Garage chart's Outdoor Temp overlay: now sourced from this same KATY
+    // feed (native ~5-min resolution for shorter ranges) instead of the old
+    // hourly-bucketed masterWeatherCache lookup. Independent {x,y} timestamps
+    // (parsing: false on this dataset) since KATY's own reporting times don't
+    // line up with the garage sensor's.
+    if (garageChartInstance) {
+        const outdoorDataset = garageChartInstance.data.datasets.find(d => d.label === "Outdoor Temp (°F)");
+        if (outdoorDataset) {
+            outdoorDataset.data = points.filter(p => p.temp !== null).map(p => ({ x: p.t, y: p.temp }));
+            garageChartInstance.update();
+        }
     }
 
     if (katyWindChartInstance) {
@@ -684,10 +695,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // First, check if the garage chart was created successfully
     if (garageChartInstance) {
-        // Then, push the new dataset to THAT specific chart instance
+        // Then, push the new dataset to THAT specific chart instance.
+        // parsing: false + {x, y} data points (set in refreshKatyWeatherChart)
+        // since this now runs on its own ~5-min KATY refresh cadence, with its
+        // own timestamps independent of the garage sensor's own reporting times.
         garageChartInstance.data.datasets.push({
             label: 'Outdoor Temp (°F)',
-            data: outdoorTempHistory,
+            data: [],
+            parsing: false,
             borderColor: 'rgb(255, 99, 132)', // A different color for the outdoor temp
             borderWidth: 2,
             fill: false,
@@ -760,15 +775,15 @@ document.addEventListener('DOMContentLoaded', () => {
             plugins: {
                 zoom: {
                     pan: {
-                        enabled: true,
+                        enabled: false,
                         mode: 'x'
                     },
                     zoom: {
                         wheel: {
-                            enabled: true
+                            enabled: false
                         },
                         pinch: {
-                            enabled: true
+                            enabled: false
                         },
                         mode: 'x'
                     }
@@ -810,7 +825,6 @@ if (sumpRunsPerDayChartInstance) {
             data: {
                 labels: [],
                 datasets: [
-                    { label: 'Temp (°F)', data: [], borderColor: 'rgb(255, 99, 132)', yAxisID: 'y_temp', pointRadius: 0, borderWidth: 2, tension: 0.1 },
                     { label: 'Humidity (%)', data: [], borderColor: 'rgb(54, 162, 235)', yAxisID: 'y_humidity', pointRadius: 0, borderWidth: 2, tension: 0.1 },
                     { label: 'Pressure (inHg)', data: [], borderColor: 'rgb(201, 203, 207)', yAxisID: 'y_pressure', pointRadius: 0, borderWidth: 2, tension: 0.1 }
                 ]
@@ -821,17 +835,13 @@ if (sumpRunsPerDayChartInstance) {
                 interaction: { mode: 'nearest', axis: 'x', intersect: false },
                 scales: {
                     x: { type: 'time' },
-                    y_temp: {
-                        type: 'linear', position: 'left',
-                        title: { display: true, text: 'Temp (°F)' }
-                    },
                     y_humidity: {
-                        type: 'linear', position: 'right', min: 0, max: 100,
-                        title: { display: true, text: 'Humidity (%)' },
-                        grid: { drawOnChartArea: false }
+                        type: 'linear', position: 'left', min: 0, max: 100,
+                        title: { display: true, text: 'Humidity (%)' }
                     },
                     y_pressure: {
                         type: 'linear', position: 'right', offset: true,
+                        min: 28.2, max: 31.5,
                         title: { display: true, text: 'Pressure (inHg)' },
                         grid: { drawOnChartArea: false }
                     }
@@ -839,8 +849,8 @@ if (sumpRunsPerDayChartInstance) {
                 plugins: {
                     legend: { display: true },
                     zoom: {
-                        pan: { enabled: true, mode: 'x' },
-                        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+                        pan: { enabled: false, mode: 'x' },
+                        zoom: { wheel: { enabled: false }, pinch: { enabled: false }, mode: 'x' }
                     }
                 }
             }
@@ -889,8 +899,8 @@ if (sumpRunsPerDayChartInstance) {
                 plugins: {
                     legend: { display: true },
                     zoom: {
-                        pan: { enabled: true, mode: 'x' },
-                        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+                        pan: { enabled: false, mode: 'x' },
+                        zoom: { wheel: { enabled: false }, pinch: { enabled: false }, mode: 'x' }
                     }
                 }
             }
@@ -1082,31 +1092,12 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
                 const lastHeaterStatus = heaterStatusHistory[heaterStatusHistory.length - 1];
                 liveHeaterStatusElement.textContent = lastHeaterStatus === 1 ? "On" : "Off";
             }
-            
-           if (timeHistory.length > 0) {
-                  getOrFetchMasterWeatherData().then(weatherData => {
-                      const mappedTemps = timeHistory.map(t => {
-                          const hourTs = Math.floor(new Date(t).getTime() / 3600000) * 3600000;
-                          // Get the temp property from the master data
-                          return weatherData.get(hourTs)?.temp ?? null;
-                      });
 
-                      // Rebuild outdoorTempHistory IN PLACE (rather than swapping in a
-                      // brand-new array) so it stays the same array reference the live
-                      // SSE handler pushes into below -- otherwise live points would
-                      // silently stop showing up on the Outdoor Temp overlay.
-                      outdoorTempHistory.length = 0;
-                      outdoorTempHistory.push(...mappedTemps);
-
-                      if (garageChartInstance) {
-                          const outdoorDataset = garageChartInstance.data.datasets.find(d => d.label === "Outdoor Temp (°F)");
-                          if (outdoorDataset) {
-                              outdoorDataset.data = outdoorTempHistory;
-                              garageChartInstance.update();
-                          }
-                      }
-                  });
-              }
+            // NOTE: The garage chart's Outdoor Temp overlay is no longer
+            // populated here -- it's driven by refreshKatyWeatherChart()
+            // instead (see there), which sources it from KATY's own ~5-min
+            // observations rather than an hourly bucket lookup tied to the
+            // garage sensor's own reporting cadence.
         })
         .catch(err => {
             logDiagError("Temp Monitor history fetch", err);
@@ -1322,21 +1313,18 @@ function connectTempMonitorSSE() {
             const heaterStatusValue = (jsonData.heateron === 1 || jsonData.heateron === "1") ? 1 : 0;
             heaterStatusHistory.push(heaterStatusValue);
 
-            // Same for the garage chart's Outdoor Temp overlay. This is a plain
-            // read against the already-cached weather Map (no new fetch), so it
-            // won't trigger extra Visual Crossing API calls on every live event.
-            const hourTs = Math.floor(timestamp.getTime() / 3600000) * 3600000;
-            const outdoorTempValue = masterWeatherCache.data.get(hourTs)?.temp ?? null;
-            outdoorTempHistory.push(outdoorTempValue);
-
             if (timeHistory.length > MAX_HISTORY_POINTS) {
                 timeHistory.shift(); fridgeHistory.shift(); freezerHistory.shift(); garageHistory.shift();
-                heaterStatusHistory.shift(); outdoorTempHistory.shift();
+                heaterStatusHistory.shift();
             }
 
             if (fridgeChartInstance) { fridgeChartInstance.data.labels = timeHistory; fridgeChartInstance.data.datasets[0].data = fridgeHistory; fridgeChartInstance.data.datasets[1].data = heaterStatusHistory; fridgeChartInstance.update(); }
             if (freezerChartInstance) { freezerChartInstance.data.labels = timeHistory; freezerChartInstance.data.datasets[0].data = freezerHistory; freezerChartInstance.update(); }
-            if (garageChartInstance) { garageChartInstance.data.labels = timeHistory; garageChartInstance.data.datasets[0].data = garageHistory; garageChartInstance.data.datasets[1].data = outdoorTempHistory; garageChartInstance.update(); }
+            // NOTE: garageChartInstance's Outdoor Temp overlay (datasets[1]) is
+            // intentionally not touched here -- it's managed independently by
+            // refreshKatyWeatherChart() on its own ~5-min KATY refresh cadence,
+            // with its own {x,y} timestamps (see the dataset's parsing: false).
+            if (garageChartInstance) { garageChartInstance.data.labels = timeHistory; garageChartInstance.data.datasets[0].data = garageHistory; garageChartInstance.update(); }
 
             diagState.tempConn = "Receiving data";
             renderDiagnostics();

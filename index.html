@@ -8,11 +8,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/moment@^2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@^1"></script>
-    <!-- Hammer.js: required by the zoom plugin for drag/touch panning (mouse
-         wheel zoom works without it, which is why zoom worked but pan didn't
-         until this was added). Must load before the zoom plugin below. -->
-    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
-    <!-- Zoom plugin (must be after Chart.js and Hammer.js) -->
+    <!-- Zoom plugin: pan/zoom interactions are disabled (see script.js chart
+         configs) since they made the charts hard to navigate, especially on
+         mobile, so Hammer.js (needed only for touch panning) was removed too. -->
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
 
 </head>
@@ -35,11 +33,15 @@
                 <text x="90" y="54" text-anchor="middle" fill="#90caf9" font-size="11">E</text>
                 <text x="50" y="97" text-anchor="middle" fill="#90caf9" font-size="11">S</text>
                 <text x="10" y="54" text-anchor="middle" fill="#90caf9" font-size="11">W</text>
-                <!-- Needle rotated by JS to point toward the compass bearing
-                     the wind is blowing FROM (standard wind-vane convention).
-                     Drawn pointing at N (0deg) at rest. -->
+                <!-- Needle rotated by JS to the compass bearing the wind is
+                     blowing FROM. The tip sits exactly at the rotation pivot
+                     (50,50) so it stays visually fixed at the center
+                     regardless of angle, while the tail sweeps around to the
+                     source direction -- this reads as "wind flowing in from
+                     there" rather than "arrow traveling that way." Drawn
+                     with the tail at N (0deg) at rest. -->
                 <g id="wind-vane-needle" transform="rotate(0 50 50)">
-                    <polygon points="50,15 45,50 50,44 55,50" fill="rgb(153,102,255)"/>
+                    <polygon points="50,50 45,15 50,21 55,15" fill="rgb(153,102,255)"/>
                 </g>
             </svg>
             <div id="wind-vane-label"></div>
