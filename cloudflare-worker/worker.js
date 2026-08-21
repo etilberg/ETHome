@@ -38,6 +38,13 @@ const CORS_HEADERS = {
 
 export default {
     async fetch(request, env) {
+        // TEMPORARY DIAGNOSTIC -- remove once the token issue is confirmed
+        // fixed. Logs only length + first/last 2 chars, never the full
+        // secret, so this is safe to leave in Cloudflare's own private logs
+        // briefly but should still be removed once we're done debugging.
+        const t = env.PARTICLE_TOKEN || '';
+        console.log(`DIAG: PARTICLE_TOKEN length=${t.length} first2=${t.slice(0, 2)} last2=${t.slice(-2)}`);
+
         const url = new URL(request.url);
 
         if (request.method === "OPTIONS") {
