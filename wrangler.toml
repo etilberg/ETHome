@@ -1,0 +1,12 @@
+# Config for the ET Home Particle proxy Worker.
+#
+# IMPORTANT: the real Particle access token is NOT set here, and never
+# should be -- this file is committed to a public GitHub repo. Set it as a
+# secret through the Cloudflare dashboard instead:
+#   Workers & Pages -> (this Worker) -> Settings -> Variables and Secrets
+#   -> Add secret -> name: PARTICLE_TOKEN, value: <your real token>
+# or via `wrangler secret put PARTICLE_TOKEN` if using the CLI locally.
+
+name = "ethome-particle-proxy"
+main = "worker.js"
+compatibility_date = "2026-08-01"
