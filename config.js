@@ -15,7 +15,7 @@ const NWS_LONGITUDE = -97.101472;
 // the real access token stays server-side instead of sitting in this public
 // file. See cloudflare-worker/README.md for setup. Replace this with your
 // deployed Worker's URL (no trailing slash).
-const PARTICLE_PROXY_BASE_URL = "https://ethome-particle-proxy.YOUR-SUBDOMAIN.workers.dev";
+const PARTICLE_PROXY_BASE_URL = "https://ethome.etilberg.workers.dev";
 
 // -- Device 1: Fridge/Freezer Monitor --
 const TEMP_MONITOR_DEVICE_ID = "240039000e47353136383631";
