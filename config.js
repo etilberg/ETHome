@@ -1,8 +1,4 @@
 // config.js - Configuration for Particle Dashboard
-
-// !! IMPORTANT: Replace these placeholders with your actual Device IDs and Access Tokens !!
-// !! SECURITY WARNING: These values are still visible in browser source code.
-// !! Avoid committing actual tokens to public repositories if security is critical.
 // config.js
 
 // -- Weather (National Weather Service / NOAA, api.weather.gov) --
@@ -13,15 +9,19 @@
 const NWS_LATITUDE = 44.925639;
 const NWS_LONGITUDE = -97.101472;
 
-// -- Device 1: Fridge/Freezer Monitor --
-// ... (rest of the file)
+// -- Particle Cloud proxy --
+// All Particle API calls (event streams, heater control, device reset) go
+// through a small Cloudflare Worker instead of api.particle.io directly, so
+// the real access token stays server-side instead of sitting in this public
+// file. See cloudflare-worker/README.md for setup. Replace this with your
+// deployed Worker's URL (no trailing slash).
+const PARTICLE_PROXY_BASE_URL = "https://ethome-particle-proxy.YOUR-SUBDOMAIN.workers.dev";
+
 // -- Device 1: Fridge/Freezer Monitor --
 const TEMP_MONITOR_DEVICE_ID = "240039000e47353136383631";
-const TEMP_MONITOR_ACCESS_TOKEN = "28f3c69720f69b2ffbdcdd0534b67f49e4f1030e";
 
 // -- Device 2: Sump Pump Monitor --
 const SUMP_MONITOR_DEVICE_ID = "3b0055000851353531343431";
-const SUMP_MONITOR_ACCESS_TOKEN = "28f3c69720f69b2ffbdcdd0534b67f49e4f1030e";
 
 // --- Other Shared Configuration ---
 const TEMP_MONITOR_EVENT_NAME = "GarageWebHook"; // As per your config (1).js

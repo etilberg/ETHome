@@ -587,9 +587,13 @@ async function displayCurrentWeather() {
         }
 
         // Wind vane: rotate the needle to the compass bearing the wind is
-        // blowing FROM (standard wind-vane convention), drawn pointing at N
-        // (0deg) at rest. Calm/variable wind (no direction value) just
-        // leaves the needle at rest with no label.
+        // blowing FROM. The needle shape (in index.html) has its tip at the
+        // rotation pivot and its tail at the outer radius, so the tip stays
+        // visually fixed at center while the tail sweeps to the source
+        // direction -- reads as "wind flowing in from there" rather than
+        // "arrow traveling that way." At rest (0deg) the tail points at N.
+        // Calm/variable wind (no direction value) just leaves the needle at
+        // rest with no label.
         const windDirDeg = obs.windDirection && obs.windDirection.value;
         const needleEl = document.getElementById('wind-vane-needle');
         const vaneLabelEl = document.getElementById('wind-vane-label');
@@ -1256,15 +1260,17 @@ function fetchSumpHistoricalData(rangeHours) {
 // --- Function to Connect to Temp Monitor SSE ---
 function connectTempMonitorSSE() {
     //console.log("DEBUG: Initializing Temp Monitor connection.");
-    if (!TEMP_MONITOR_DEVICE_ID || TEMP_MONITOR_DEVICE_ID === "YOUR_FRIDGE_FREEZER_DEVICE_ID_HERE" || !TEMP_MONITOR_ACCESS_TOKEN || TEMP_MONITOR_ACCESS_TOKEN === "YOUR_FRIDGE_FREEZER_ACCESS_TOKEN_HERE") {
-         console.error("DEBUG: Temp Monitor Device ID or Access Token not set (checked in connect function).");
+    if (!PARTICLE_PROXY_BASE_URL || PARTICLE_PROXY_BASE_URL.includes("YOUR-SUBDOMAIN")) {
+         console.error("DEBUG: PARTICLE_PROXY_BASE_URL not set in config.js.");
          tempMonitorStatusElement.textContent = "Config Error!";
          tempMonitorStatusElement.style.color = 'red';
         return;
     }
 
-    const sseUrl = `https://api.particle.io/v1/devices/${TEMP_MONITOR_DEVICE_ID}/events/${TEMP_MONITOR_EVENT_NAME}?access_token=${TEMP_MONITOR_ACCESS_TOKEN}`;
-    //console.log(`DEBUG: Attempting Temp Monitor SSE connection (Token Hidden)`);
+    // Goes through the Cloudflare Worker proxy (see cloudflare-worker/) so
+    // the real Particle access token never reaches the browser.
+    const sseUrl = `${PARTICLE_PROXY_BASE_URL}/events/temp`;
+    //console.log(`DEBUG: Attempting Temp Monitor SSE connection via proxy`);
     tempMonitorStatusElement.textContent = "Connecting...";
     tempMonitorStatusElement.style.color = '#555';
 
@@ -1356,15 +1362,17 @@ function connectTempMonitorSSE() {
 // --- Function to Connect to Sump Monitor SSE ---
 function connectSumpMonitorSSE() {
     // console.log("DEBUG: Initializing Sump Monitor connection.");
-     if (!SUMP_MONITOR_DEVICE_ID || SUMP_MONITOR_DEVICE_ID === "YOUR_SUMP_PUMP_DEVICE_ID_HERE" || !SUMP_MONITOR_ACCESS_TOKEN || SUMP_MONITOR_ACCESS_TOKEN === "YOUR_SUMP_PUMP_ACCESS_TOKEN_HERE") {
-        console.error("DEBUG: Sump Monitor Device ID or Access Token not set (checked in connect function).");
+     if (!PARTICLE_PROXY_BASE_URL || PARTICLE_PROXY_BASE_URL.includes("YOUR-SUBDOMAIN")) {
+        console.error("DEBUG: PARTICLE_PROXY_BASE_URL not set in config.js.");
         sumpMonitorStatusElement.textContent = "Config Error!";
         sumpMonitorStatusElement.style.color = 'red';
         return;
     }
 
-    const sseUrl = `https://api.particle.io/v1/devices/${SUMP_MONITOR_DEVICE_ID}/events/${SUMP_MONITOR_EVENT_NAME}?access_token=${SUMP_MONITOR_ACCESS_TOKEN}`;
-    //console.log(`DEBUG: Attempting Sump Monitor SSE connection (Token Hidden)`);
+    // Goes through the Cloudflare Worker proxy (see cloudflare-worker/) so
+    // the real Particle access token never reaches the browser.
+    const sseUrl = `${PARTICLE_PROXY_BASE_URL}/events/sump`;
+    //console.log(`DEBUG: Attempting Sump Monitor SSE connection via proxy`);
     sumpMonitorStatusElement.textContent = "Connecting...";
      sumpMonitorStatusElement.style.color = '#555';
 
@@ -1779,12 +1787,9 @@ function fetchSumpAnalyticsData() {
 // ================================
 // Fridge Heater Control Logic
 // ================================
-
-const FRIDGE_DEVICE_ID = TEMP_MONITOR_DEVICE_ID;
-const FRIDGE_ACCESS_TOKEN = TEMP_MONITOR_ACCESS_TOKEN;
-
-const FRIDGE_HEATER_VARIABLE_NAME = "FridgeHeaterEnabled"; // Your variable name
-const FRIDGE_HEATER_FUNCTION_NAME = "setFridgeHeater";    // Your function name
+// Goes through the Cloudflare Worker proxy (see cloudflare-worker/) rather
+// than calling api.particle.io directly, so the real access token stays
+// server-side.
 
 // Get Elements ONCE (global scope)
 const fridgeButton = document.getElementById("fridge-toggle-button");
@@ -1800,7 +1805,7 @@ window.addEventListener("load", () => {
 
 async function fetchFridgeHeaterState() {
   try {
-    const resp = await fetch(`https://api.particle.io/v1/devices/${FRIDGE_DEVICE_ID}/${FRIDGE_HEATER_VARIABLE_NAME}?access_token=${FRIDGE_ACCESS_TOKEN}`);
+    const resp = await fetch(`${PARTICLE_PROXY_BASE_URL}/fridge-heater-state`);
     if (!resp.ok) {
       const errorText = await resp.text();
       console.error("Error response:", errorText);
@@ -1833,12 +1838,12 @@ async function toggleFridgeHeater() {
   const action = fridgeButton.textContent.includes("Enable") ? "on" : "off";
 
   try {
-    const resp = await fetch(`https://api.particle.io/v1/devices/${FRIDGE_DEVICE_ID}/${FRIDGE_HEATER_FUNCTION_NAME}`, {
+    const resp = await fetch(`${PARTICLE_PROXY_BASE_URL}/fridge-heater-toggle`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Type": "application/json",
       },
-      body: `access_token=${FRIDGE_ACCESS_TOKEN}&args=${action}`
+      body: JSON.stringify({ action })
     });
     const data = await resp.json();
     if (data && data.return_value !== undefined) {
@@ -1877,13 +1882,10 @@ if (resetButton) {
     try {
       console.log("Sending reset function call to Photon...");
       
-      // Call the reset FUNCTION on the device
-      const resp = await fetch(`https://api.particle.io/v1/devices/${TEMP_MONITOR_DEVICE_ID}/reset`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: `access_token=${TEMP_MONITOR_ACCESS_TOKEN}&args=reset`
+      // Call the reset FUNCTION on the device, via the Cloudflare Worker
+      // proxy (see cloudflare-worker/) rather than api.particle.io directly.
+      const resp = await fetch(`${PARTICLE_PROXY_BASE_URL}/reset-device`, {
+        method: "POST"
       });
       
       const data = await resp.json();
