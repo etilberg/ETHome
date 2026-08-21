@@ -1,12 +1,30 @@
-# Config for the ET Home Particle proxy Worker.
+# Config for the ET Home dashboard's backend Worker (Particle proxy + Nest
+# thermostat polling/history).
 #
-# IMPORTANT: the real Particle access token is NOT set here, and never
-# should be -- this file is committed to a public GitHub repo. Set it as a
-# secret through the Cloudflare dashboard instead:
-#   Workers & Pages -> (this Worker) -> Settings -> Variables and Secrets
-#   -> Add secret -> name: PARTICLE_TOKEN, value: <your real token>
-# or via `wrangler secret put PARTICLE_TOKEN` if using the CLI locally.
+# IMPORTANT: nothing sensitive is set in this file -- it's committed to a
+# public GitHub repo. All secrets and bindings below are configured directly
+# in the Cloudflare dashboard instead. See README.md for the full setup.
+#
+# Secrets (Settings -> Variables and Secrets -> Add secret):
+#   PARTICLE_TOKEN     -- Particle Cloud access token
+#   NEST_CLIENT_SECRET -- Google OAuth Client Secret for the Nest integration
+#   NEST_REFRESH_TOKEN -- long-lived Nest OAuth refresh token
+#
+# KV binding (Settings -> Bindings -> Add binding -> KV Namespace):
+#   Variable name: NEST_KV -- bound to a KV namespace you create under
+#   Storage & Databases -> KV. Used to store Nest's polled reading history
+#   (Nest's API only exposes current state, not history, so this Worker
+#   builds its own via the Cron Trigger below).
+#
+# Cron Trigger (Settings -> Trigger Events -> Add Cron Trigger):
+#   Also declared below for wrangler-based deploys, but as with secrets and
+#   bindings, this Git-integrated deploy has previously needed the dashboard
+#   setting itself (not just this file) to actually take effect -- verify it
+#   shows under Trigger Events after deploying.
 
-name = "ethome-particle-proxy"
+name = "ethome"
 main = "worker.js"
 compatibility_date = "2026-08-01"
+
+[triggers]
+crons = ["*/5 * * * *"]

@@ -24,6 +24,21 @@
 const SUMP_DEVICE_ID = "3b0055000851353531343431";
 const TEMP_DEVICE_ID = "240039000e47353136383631";
 
+// -- Nest thermostat (indoor temp/humidity/HVAC status) --
+// Non-secret identifiers -- safe to hardcode here just like the Particle
+// device IDs above. Only the OAuth client secret and refresh token (used
+// below via env.NEST_CLIENT_SECRET / env.NEST_REFRESH_TOKEN) are sensitive.
+const NEST_PROJECT_ID = "c8083249-ed39-477e-8922-a2ee4a1eccdd";
+const NEST_CLIENT_ID = "406796196865-vbbfrmegqiec5lq9q8ldqn2lj1ipr7v8.apps.googleusercontent.com";
+const NEST_DEVICE_NAME = "enterprises/c8083249-ed39-477e-8922-a2ee4a1eccdd/devices/AVPHwEuzGOZULzgQujC6_8Q_YuRvsHLts6ccrX1kxcCwxRAH02vkoADSnNEQDd2kaGzctxC_zQ6s80JWV4vEsMNRDszVnw";
+// Nest's API only exposes *current* state, not history, so this Worker
+// builds its own history by polling on a Cron Trigger (see `scheduled`
+// below) and storing readings in KV -- a single JSON array under one key,
+// trimmed to a retention window, rather than one KV entry per reading (KV's
+// free tier is generous on reads but tight on writes/lists).
+const NEST_HISTORY_KV_KEY = "nest:history";
+const NEST_HISTORY_RETENTION_MS = 7 * 24 * 3600 * 1000; // 7 days
+
 // Restrict CORS to the dashboard's own origin. Note: this stops casual
 // browser-based abuse (another site embedding/calling this), but it is NOT
 // a real access-control boundary -- a non-browser client (curl, a script)
@@ -89,10 +104,33 @@ export default {
                 return jsonResponse(await resp.text(), resp.status);
             }
 
+            // Both Nest routes serve from KV rather than calling Google live on
+            // every request -- readings only actually change as often as the
+            // Cron Trigger polls (see `scheduled` below), so there's no benefit
+            // to a live call here, and it keeps Google API usage bounded and
+            // predictable regardless of how often the dashboard is loaded.
+            if (url.pathname === "/nest/current" && request.method === "GET") {
+                const history = await readNestHistory(env);
+                const latest = history.length > 0 ? history[history.length - 1] : null;
+                return jsonResponse(JSON.stringify({ latest }), 200);
+            }
+
+            if (url.pathname === "/nest/history" && request.method === "GET") {
+                const history = await readNestHistory(env);
+                return jsonResponse(JSON.stringify({ history }), 200);
+            }
+
             return new Response("Not found", { status: 404, headers: CORS_HEADERS });
         } catch (err) {
             return jsonResponse(JSON.stringify({ error: err.message }), 500);
         }
+    },
+
+    // Cron Trigger entry point (configured in the Cloudflare dashboard, see
+    // cloudflare-worker/README.md) -- polls the Nest device on a schedule and
+    // appends the reading to KV. Not tied to any dashboard page load.
+    async scheduled(event, env, ctx) {
+        ctx.waitUntil(pollNestAndStore(env));
     },
 };
 
@@ -117,4 +155,66 @@ function jsonResponse(bodyText, status) {
         status,
         headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
     });
+}
+
+// --- Nest helpers ---
+
+async function readNestHistory(env) {
+    const raw = await env.NEST_KV.get(NEST_HISTORY_KV_KEY);
+    return raw ? JSON.parse(raw) : [];
+}
+
+// Google access tokens last 1 hour; the refresh token is long-lived (unless
+// revoked, or left completely unused for 6+ months -- our own polling cadence
+// naturally keeps it active). Refreshing once per poll is simple and, at a
+// few-times-per-hour polling rate, comfortably cheap.
+async function getNestAccessToken(env) {
+    const resp = await fetch(
+        `https://www.googleapis.com/oauth2/v4/token?client_id=${NEST_CLIENT_ID}&client_secret=${env.NEST_CLIENT_SECRET}&refresh_token=${env.NEST_REFRESH_TOKEN}&grant_type=refresh_token`,
+        { method: "POST" }
+    );
+    if (!resp.ok) throw new Error(`Nest token refresh failed: HTTP ${resp.status}`);
+    const data = await resp.json();
+    if (!data.access_token) throw new Error("Nest token refresh returned no access_token");
+    return data.access_token;
+}
+
+async function fetchNestDeviceState(env) {
+    const accessToken = await getNestAccessToken(env);
+    const resp = await fetch(`https://smartdevicemanagement.googleapis.com/v1/${NEST_DEVICE_NAME}`, {
+        headers: { "Authorization": `Bearer ${accessToken}` },
+    });
+    if (!resp.ok) throw new Error(`Nest device fetch failed: HTTP ${resp.status}`);
+    const data = await resp.json();
+    const traits = data.traits || {};
+
+    const tempC = traits["sdm.devices.traits.Temperature"]?.ambientTemperatureCelsius;
+    const humidity = traits["sdm.devices.traits.Humidity"]?.ambientHumidityPercent;
+    // "HEATING" | "COOLING" | "OFF" per Google's ThermostatHvac trait
+    const hvacStatus = traits["sdm.devices.traits.ThermostatHvac"]?.status ?? null;
+
+    const indoorTemp = (tempC === undefined || tempC === null) ? null : (tempC * 9 / 5 + 32);
+
+    return {
+        t: Date.now(),
+        indoorTemp,
+        humidity: humidity ?? null,
+        hvacStatus,
+    };
+}
+
+async function pollNestAndStore(env) {
+    try {
+        const reading = await fetchNestDeviceState(env);
+        const history = await readNestHistory(env);
+        history.push(reading);
+
+        const cutoff = Date.now() - NEST_HISTORY_RETENTION_MS;
+        const trimmed = history.filter(r => r.t >= cutoff);
+
+        await env.NEST_KV.put(NEST_HISTORY_KV_KEY, JSON.stringify(trimmed));
+        console.log(`DEBUG: Nest poll OK, history now ${trimmed.length} points.`);
+    } catch (err) {
+        console.error("DEBUG: Nest poll failed:", err);
+    }
 }
