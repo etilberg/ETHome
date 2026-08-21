@@ -173,7 +173,14 @@ async function getNestAccessToken(env) {
         `https://www.googleapis.com/oauth2/v4/token?client_id=${NEST_CLIENT_ID}&client_secret=${env.NEST_CLIENT_SECRET}&refresh_token=${env.NEST_REFRESH_TOKEN}&grant_type=refresh_token`,
         { method: "POST" }
     );
-    if (!resp.ok) throw new Error(`Nest token refresh failed: HTTP ${resp.status}`);
+    if (!resp.ok) {
+        // Google's OAuth error responses (e.g. {"error":"invalid_grant",
+        // "error_description":"Token has been expired or revoked."}) don't
+        // contain the secret or refresh token itself, just a description of
+        // what's wrong -- safe to include in the thrown error for debugging.
+        const errorBody = await resp.text().catch(() => '(could not read response body)');
+        throw new Error(`Nest token refresh failed: HTTP ${resp.status} - ${errorBody}`);
+    }
     const data = await resp.json();
     if (!data.access_token) throw new Error("Nest token refresh returned no access_token");
     return data.access_token;
@@ -215,6 +222,6 @@ async function pollNestAndStore(env) {
         await env.NEST_KV.put(NEST_HISTORY_KV_KEY, JSON.stringify(trimmed));
         console.log(`DEBUG: Nest poll OK, history now ${trimmed.length} points.`);
     } catch (err) {
-        console.error("DEBUG: Nest poll failed:", err);
+        console.error(`DEBUG: Nest poll failed: ${err.message}`);
     }
 }
