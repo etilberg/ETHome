@@ -133,6 +133,28 @@
     <p><small>Last updated: <span id="sump-monitor-last-updated">Never</span></small></p>
     </section>
 
+    <section id="nest-section">
+        <h2>Indoor Climate (<span id="nest-status">Initializing...</span>)</h2>
+        <div class="live-values">
+            <div class="temp-card">
+                <div class="temp-card-label">Indoor Temp</div>
+                <div class="temp-card-current"><span id="nest-temp">--</span>&deg;</div>
+            </div>
+            <div class="temp-card">
+                <div class="temp-card-label">Humidity</div>
+                <div class="temp-card-current"><span id="nest-humidity">--</span>%</div>
+            </div>
+            <div class="temp-card">
+                <div class="temp-card-label">HVAC</div>
+                <div class="temp-card-current" id="nest-hvac-status">--</div>
+            </div>
+        </div>
+        <div class="chart-container chart-container-large">
+            <canvas id="nestChart"></canvas>
+        </div>
+        <p><small>Last updated: <span id="nest-last-updated">Never</span></small></p>
+    </section>
+
     <section id="katy-weather-section">
         <h2>Weather History (<span id="katy-weather-status">Initializing...</span>)</h2>
         <div class="chart-container chart-container-large">

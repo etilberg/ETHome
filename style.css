@@ -260,3 +260,16 @@ small {
     font-size: 0.8em;
     color: #b0bec5; 
 }
+
+/* Nest HVAC status colors: red while heating, blue while cooling, neutral otherwise */
+.hvac-heating {
+    color: #ff6b6b;
+    font-weight: bold;
+}
+.hvac-cooling {
+    color: #54a0ff;
+    font-weight: bold;
+}
+.hvac-idle {
+    color: #b0bec5;
+}

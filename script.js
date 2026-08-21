@@ -34,6 +34,13 @@ const diagLastErrorElement = document.getElementById('diag-last-error');
 const katyWeatherStatusElement = document.getElementById('katy-weather-status');
 const katyWeatherLastUpdatedElement = document.getElementById('katy-weather-last-updated');
 
+// Nest Thermostat Elements
+const nestStatusElement = document.getElementById('nest-status');
+const nestTempElement = document.getElementById('nest-temp');
+const nestHumidityElement = document.getElementById('nest-humidity');
+const nestHvacStatusElement = document.getElementById('nest-hvac-status');
+const nestLastUpdatedElement = document.getElementById('nest-last-updated');
+
 // --- Data Storage ---
 let timeHistory = [];
 let fridgeHistory = [];
@@ -58,6 +65,7 @@ let sumpTempChartInstance, sumpRuntimeChartInstance, sumpSinceRunChartInstance;
 let sumpRunsPerDayChartInstance;
 let katyWeatherChartInstance;
 let katyWindChartInstance;
+let nestChartInstance;
 
 // A single, unified cache for all weather station data
 let masterWeatherCache = {
@@ -325,91 +333,127 @@ async function resolveNwsStation() {
 // For the 1-week range, collapses to one point per hour (latest reading
 // within each hour, i.e. a "top of the hour" value) to keep the chart
 // readable and the point count small, per the chosen approach.
-async function fetchKatyWeatherDetail(rangeHours) {
-    console.log(`DEBUG: Fetching KATY weather detail (temp/humidity/wind/pressure) for last ${rangeHours} hours.`);
-    try {
-        const stationId = await resolveNwsStation();
-        if (!stationId) throw new Error("No NWS station resolved");
 
-        // Day-chunked requests, same reasoning as fetchMasterWeatherData: a
-        // single wide request can silently cap out at however many records
-        // the API returns per call. Only fetch as many days as the selected
-        // range actually needs (plus one for safety margin).
-        const daysNeeded = Math.min(8, Math.ceil(rangeHours / 24) + 1);
-        const rawObs = [];
+// Raw observations are cached for 5 minutes (KATY's own real-world reporting
+// cadence -- refreshing faster wouldn't surface anything new) and always
+// fetched for the FULL 8-day window regardless of which range is currently
+// selected. That means switching the range dropdown just re-filters this
+// cache instead of hitting NWS again, and the periodic refresh timer can
+// poll this without ever exceeding one real fetch per 5 minutes.
+let katyRawObsCache = { obs: [], timestamp: 0 };
+const KATY_OBS_CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+// Guards against concurrent callers (e.g. initial load + a periodic tick
+// landing close together) each seeing a stale cache and firing their own
+// redundant 8-day fetch.
+let katyRawObsFetchPromise = null;
 
-        for (let i = 0; i < daysNeeded; i++) {
-            const dayEnd = new Date(Date.now() - i * 24 * 3600000);
-            const dayStart = new Date(dayEnd.getTime() - 24 * 3600000);
-            const url = `https://api.weather.gov/stations/${stationId}/observations?start=${dayStart.toISOString()}&end=${dayEnd.toISOString()}&limit=500`;
-
-            try {
-                const res = await fetch(url, { headers: { 'Accept': 'application/geo+json' } });
-                if (!res.ok) throw new Error(`HTTP error ${res.status} for day offset ${i}`);
-                const json = await res.json();
-                const features = json.features || [];
-
-                for (const feature of features) {
-                    const p = feature.properties || {};
-                    if (!p.timestamp) continue;
-                    const t = new Date(p.timestamp).getTime();
-
-                    const tempC = p.temperature && p.temperature.value;
-                    const temp = (tempC === null || tempC === undefined) ? null : (tempC * 9 / 5 + 32);
-
-                    const humidity = (p.relativeHumidity && p.relativeHumidity.value != null) ? p.relativeHumidity.value : null;
-
-                    const windSpeedKmh = p.windSpeed && p.windSpeed.value;
-                    const windSpeed = (windSpeedKmh === null || windSpeedKmh === undefined) ? null : (windSpeedKmh * 0.621371);
-
-                    const windGustKmh = p.windGust && p.windGust.value;
-                    const windGust = (windGustKmh === null || windGustKmh === undefined) ? null : (windGustKmh * 0.621371);
-
-                    const windDir = (p.windDirection && p.windDirection.value != null) ? p.windDirection.value : null;
-
-                    // Prefer station-level barometric pressure; fall back to
-                    // sea-level pressure if that's all this observation has.
-                    const pressurePa = (p.barometricPressure && p.barometricPressure.value != null)
-                        ? p.barometricPressure.value
-                        : (p.seaLevelPressure && p.seaLevelPressure.value);
-                    const pressure = (pressurePa === null || pressurePa === undefined) ? null : (pressurePa / 3386.39);
-
-                    rawObs.push({ t, temp, humidity, windSpeed, windGust, windDir, pressure });
-                }
-            } catch (dayError) {
-                console.error(`DEBUG: KATY weather-detail fetch failed for day offset ${i}:`, dayError);
-            }
-
-            if (i < daysNeeded - 1) {
-                await new Promise(resolve => setTimeout(resolve, 150));
-            }
-        }
-
-        rawObs.sort((a, b) => a.t - b.t);
-
-        const cutoff = Date.now() - rangeHours * 3600000;
-        const inRange = rawObs.filter(o => o.t >= cutoff);
-
-        if (rangeHours > 48) {
-            // Wide ranges (1 week): collapse to one point per hour, keeping
-            // the latest observation within each hour.
-            const hourly = new Map();
-            for (const o of inRange) {
-                const hourTs = Math.floor(o.t / 3600000) * 3600000;
-                const existing = hourly.get(hourTs);
-                if (!existing || o.t > existing.t) hourly.set(hourTs, o);
-            }
-            const sortedKeys = Array.from(hourly.keys()).sort((a, b) => a - b);
-            return sortedKeys.map(k => hourly.get(k));
-        }
-
-        // Native ~5-minute resolution for shorter ranges
-        return inRange;
-    } catch (error) {
-        console.error("DEBUG: KATY weather detail fetch failed:", error);
-        logDiagError("KATY weather detail fetch", error);
-        return [];
+async function fetchKatyRawObservations() {
+    const now = Date.now();
+    if (now - katyRawObsCache.timestamp < KATY_OBS_CACHE_DURATION_MS && katyRawObsCache.obs.length > 0) {
+        return katyRawObsCache.obs;
     }
+
+    if (katyRawObsFetchPromise) {
+        console.log("DEBUG: KATY raw observation fetch already in flight, reusing it.");
+        return katyRawObsFetchPromise;
+    }
+
+    katyRawObsFetchPromise = (async () => {
+        console.log("DEBUG: Fetching KATY weather detail (temp/humidity/wind/pressure), 8-day window.");
+        const rawObs = [];
+        try {
+            const stationId = await resolveNwsStation();
+            if (!stationId) throw new Error("No NWS station resolved");
+
+            // Day-chunked requests, same reasoning as fetchMasterWeatherData:
+            // a single wide request can silently cap out at however many
+            // records the API returns per call. Always fetch the full 8-day
+            // window here (not just what the current range needs) since this
+            // is now a shared cache serving every range.
+            for (let i = 0; i < 8; i++) {
+                const dayEnd = new Date(Date.now() - i * 24 * 3600000);
+                const dayStart = new Date(dayEnd.getTime() - 24 * 3600000);
+                const url = `https://api.weather.gov/stations/${stationId}/observations?start=${dayStart.toISOString()}&end=${dayEnd.toISOString()}&limit=500`;
+
+                try {
+                    const res = await fetch(url, { headers: { 'Accept': 'application/geo+json' } });
+                    if (!res.ok) throw new Error(`HTTP error ${res.status} for day offset ${i}`);
+                    const json = await res.json();
+                    const features = json.features || [];
+
+                    for (const feature of features) {
+                        const p = feature.properties || {};
+                        if (!p.timestamp) continue;
+                        const t = new Date(p.timestamp).getTime();
+
+                        const tempC = p.temperature && p.temperature.value;
+                        const temp = (tempC === null || tempC === undefined) ? null : (tempC * 9 / 5 + 32);
+
+                        const humidity = (p.relativeHumidity && p.relativeHumidity.value != null) ? p.relativeHumidity.value : null;
+
+                        const windSpeedKmh = p.windSpeed && p.windSpeed.value;
+                        const windSpeed = (windSpeedKmh === null || windSpeedKmh === undefined) ? null : (windSpeedKmh * 0.621371);
+
+                        const windGustKmh = p.windGust && p.windGust.value;
+                        const windGust = (windGustKmh === null || windGustKmh === undefined) ? null : (windGustKmh * 0.621371);
+
+                        const windDir = (p.windDirection && p.windDirection.value != null) ? p.windDirection.value : null;
+
+                        // Prefer station-level barometric pressure; fall back
+                        // to sea-level pressure if that's all this observation has.
+                        const pressurePa = (p.barometricPressure && p.barometricPressure.value != null)
+                            ? p.barometricPressure.value
+                            : (p.seaLevelPressure && p.seaLevelPressure.value);
+                        const pressure = (pressurePa === null || pressurePa === undefined) ? null : (pressurePa / 3386.39);
+
+                        rawObs.push({ t, temp, humidity, windSpeed, windGust, windDir, pressure });
+                    }
+                } catch (dayError) {
+                    console.error(`DEBUG: KATY weather-detail fetch failed for day offset ${i}:`, dayError);
+                }
+
+                if (i < 7) {
+                    await new Promise(resolve => setTimeout(resolve, 150));
+                }
+            }
+
+            rawObs.sort((a, b) => a.t - b.t);
+            katyRawObsCache = { obs: rawObs, timestamp: Date.now() };
+        } catch (error) {
+            console.error("DEBUG: KATY weather detail fetch failed:", error);
+            logDiagError("KATY weather detail fetch", error);
+        }
+        return rawObs;
+    })();
+
+    try {
+        return await katyRawObsFetchPromise;
+    } finally {
+        katyRawObsFetchPromise = null;
+    }
+}
+
+async function fetchKatyWeatherDetail(rangeHours) {
+    const rawObs = await fetchKatyRawObservations();
+
+    const cutoff = Date.now() - rangeHours * 3600000;
+    const inRange = rawObs.filter(o => o.t >= cutoff);
+
+    if (rangeHours > 48) {
+        // Wide ranges (1 week): collapse to one point per hour, keeping
+        // the latest observation within each hour.
+        const hourly = new Map();
+        for (const o of inRange) {
+            const hourTs = Math.floor(o.t / 3600000) * 3600000;
+            const existing = hourly.get(hourTs);
+            if (!existing || o.t > existing.t) hourly.set(hourTs, o);
+        }
+        const sortedKeys = Array.from(hourly.keys()).sort((a, b) => a - b);
+        return sortedKeys.map(k => hourly.get(k));
+    }
+
+    // Native ~5-minute resolution for shorter ranges
+    return inRange;
 }
 
 async function refreshKatyWeatherChart(rangeHours) {
@@ -470,6 +514,80 @@ async function refreshKatyWeatherChart(rangeHours) {
     }
 
     console.log(`DEBUG: KATY weather detail charts updated with ${points.length} points for ${rangeHours}h range.`);
+}
+
+// --- Nest Thermostat ---
+// Unlike the Particle/NWS data, Nest history is entirely built by the Worker
+// itself (Nest's API only exposes current state) -- so this just reads
+// whatever the Worker's Cron Trigger has already stored, on the same
+// refresh cadence as the other slow-changing widgets.
+async function refreshNestData() {
+    if (nestStatusElement) {
+        nestStatusElement.textContent = "Fetching...";
+    }
+
+    try {
+        const [currentResp, historyResp] = await Promise.all([
+            fetch(`${PARTICLE_PROXY_BASE_URL}/nest/current`),
+            fetch(`${PARTICLE_PROXY_BASE_URL}/nest/history`)
+        ]);
+        if (!currentResp.ok) throw new Error(`HTTP ${currentResp.status} fetching Nest current state`);
+        if (!historyResp.ok) throw new Error(`HTTP ${historyResp.status} fetching Nest history`);
+
+        const { latest } = await currentResp.json();
+        const { history } = await historyResp.json();
+
+        updateNestLiveCards(latest);
+        updateNestChart(history || []);
+
+        if (nestStatusElement) {
+            nestStatusElement.textContent = (history && history.length > 0) ? `Loaded ${history.length} points` : "No data yet";
+        }
+        if (nestLastUpdatedElement) {
+            nestLastUpdatedElement.textContent = new Date().toLocaleTimeString();
+        }
+    } catch (error) {
+        console.error("DEBUG: Nest data fetch failed:", error);
+        logDiagError("Nest data fetch", error);
+        if (nestStatusElement) {
+            nestStatusElement.textContent = "Error";
+        }
+    }
+}
+
+function updateNestLiveCards(latest) {
+    if (!latest) return;
+
+    if (nestTempElement) {
+        nestTempElement.textContent = (latest.indoorTemp !== null && latest.indoorTemp !== undefined) ? latest.indoorTemp.toFixed(1) : '--';
+    }
+    if (nestHumidityElement) {
+        nestHumidityElement.textContent = (latest.humidity !== null && latest.humidity !== undefined) ? Math.round(latest.humidity) : '--';
+    }
+    if (nestHvacStatusElement) {
+        const status = latest.hvacStatus;
+        if (status === 'HEATING') {
+            nestHvacStatusElement.textContent = 'Heating';
+            nestHvacStatusElement.className = 'temp-card-current hvac-heating';
+        } else if (status === 'COOLING') {
+            nestHvacStatusElement.textContent = 'Cooling';
+            nestHvacStatusElement.className = 'temp-card-current hvac-cooling';
+        } else {
+            nestHvacStatusElement.textContent = status ? 'Idle' : '--';
+            nestHvacStatusElement.className = 'temp-card-current hvac-idle';
+        }
+    }
+}
+
+function updateNestChart(history) {
+    if (!nestChartInstance) return;
+
+    nestChartInstance.data.labels = history.map(r => new Date(r.t));
+    nestChartInstance.data.datasets[0].data = history.map(r => r.indoorTemp);
+    nestChartInstance.data.datasets[1].data = history.map(r => r.humidity);
+    nestChartInstance.data.datasets[2].data = history.map(r => r.hvacStatus === 'HEATING' ? 1 : 0);
+    nestChartInstance.data.datasets[3].data = history.map(r => r.hvacStatus === 'COOLING' ? 1 : 0);
+    nestChartInstance.update();
 }
 
 // Collapses a time-sorted array of {t, ...} points down to at most one per
@@ -908,6 +1026,60 @@ if (sumpRunsPerDayChartInstance) {
         document.getElementById('katyWindChart').addEventListener('dblclick', () => katyWindChartInstance.resetZoom());
     }
 
+    // Nest thermostat: Indoor Temp + Humidity lines, plus two stepped 0/1
+    // overlays (Heating in red, Cooling in blue) sharing a small hidden axis
+    // -- mutually exclusive in practice, so they never visually conflict.
+    const nestCtx = document.getElementById('nestChart')?.getContext('2d');
+    if (nestCtx) {
+        nestChartInstance = new Chart(nestCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'Indoor Temp (°F)', data: [], borderColor: 'rgb(255, 206, 86)', yAxisID: 'y_temp', pointRadius: 0, borderWidth: 2, tension: 0.1 },
+                    { label: 'Humidity (%)', data: [], borderColor: 'rgb(54, 162, 235)', yAxisID: 'y_humidity', pointRadius: 0, borderWidth: 2, tension: 0.1 },
+                    {
+                        label: 'Heating', data: [], yAxisID: 'y_hvac',
+                        borderColor: 'rgba(255, 107, 107, 0.8)', backgroundColor: 'rgba(255, 107, 107, 0.25)',
+                        stepped: true, pointRadius: 0, borderWidth: 1, fill: 'origin'
+                    },
+                    {
+                        label: 'Cooling', data: [], yAxisID: 'y_hvac',
+                        borderColor: 'rgba(84, 160, 255, 0.8)', backgroundColor: 'rgba(84, 160, 255, 0.25)',
+                        stepped: true, pointRadius: 0, borderWidth: 1, fill: 'origin'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'nearest', axis: 'x', intersect: false },
+                scales: {
+                    x: { type: 'time' },
+                    y_temp: {
+                        type: 'linear', position: 'left',
+                        title: { display: true, text: 'Temp (°F)' }
+                    },
+                    y_humidity: {
+                        type: 'linear', position: 'right', min: 0, max: 100,
+                        title: { display: true, text: 'Humidity (%)' },
+                        grid: { drawOnChartArea: false }
+                    },
+                    y_hvac: {
+                        display: false, min: 0, max: 1
+                    }
+                },
+                plugins: {
+                    legend: { display: true },
+                    zoom: {
+                        pan: { enabled: false, mode: 'x' },
+                        zoom: { wheel: { enabled: false }, pinch: { enabled: false }, mode: 'x' }
+                    }
+                }
+            }
+        });
+    }
+
     // Start SSE connections
     connectTempMonitorSSE();
     connectSumpMonitorSSE();
@@ -918,6 +1090,7 @@ if (sumpRunsPerDayChartInstance) {
     fetchTempMonitorHistoricalData(initialHours);
     fetchSumpHistoricalData(initialHours); 
     refreshKatyWeatherChart(initialHours);
+    refreshNestData();
     
     // ======================= CALL THE NEW ANALYTICS FETCH =======================
     fetchSumpAnalyticsData();
@@ -925,8 +1098,15 @@ if (sumpRunsPerDayChartInstance) {
     // Periodically rebuild the sump charts from source data (CSV history) so
     // they pick up new readings without live-appending raw points on top of
     // aggregated bins. Runs on a timer independent of the SSE live feed.
+    // Also refreshes the KATY weather-detail charts and Nest thermostat data
+    // on the same 5-minute cadence -- safe for KATY since its own fetch is
+    // internally cached for 5 minutes regardless of how often this fires,
+    // and Nest data only actually changes as often as the Worker's own Cron
+    // Trigger polls it, so there's no benefit to refreshing more often.
     setInterval(() => {
         fetchSumpHistoricalData(currentSumpRangeHours);
+        refreshKatyWeatherChart(currentSumpRangeHours);
+        refreshNestData();
     }, SUMP_CHART_REFRESH_INTERVAL_MS);
 
     // Diagnostics panel: render immediately, then keep the relative "X ago"
