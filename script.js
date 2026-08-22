@@ -77,7 +77,7 @@ const MASTER_CACHE_DURATION = 1 * 60 * 60 * 1000; // 1 hours in milliseconds
 // switching providers). A cached entry tagged with an older version is
 // treated as invalid and re-fetched, instead of silently being reused just
 // because it's still within MASTER_CACHE_DURATION.
-const WEATHER_CACHE_VERSION = 'nws-v4-iemre-precip';
+const WEATHER_CACHE_VERSION = 'iemre-precip-v5';
 
 function calculateMinMax(array) {
   if (!array.length) return { min: null, max: null };
@@ -520,8 +520,12 @@ async function refreshKatyWeatherChart(rangeHours) {
 // Unlike the Particle/NWS data, Nest history is entirely built by the Worker
 // itself (Nest's API only exposes current state) -- so this just reads
 // whatever the Worker's Cron Trigger has already stored, on the same
-// refresh cadence as the other slow-changing widgets.
-async function refreshNestData() {
+// refresh cadence as the other slow-changing widgets. Filters to the
+// selected range client-side (same dropdown as the other charts) rather
+// than adding a query param to the Worker -- the full history is small
+// (max ~2,000 points at the Worker's 7-day retention), so no need to
+// touch the Worker just to shrink what's already a cheap payload.
+async function refreshNestData(rangeHours) {
     if (nestStatusElement) {
         nestStatusElement.textContent = "Fetching...";
     }
@@ -537,11 +541,14 @@ async function refreshNestData() {
         const { latest } = await currentResp.json();
         const { history } = await historyResp.json();
 
+        const cutoff = Date.now() - rangeHours * 3600000;
+        const inRange = (history || []).filter(r => r.t >= cutoff);
+
         updateNestLiveCards(latest);
-        updateNestChart(history || []);
+        updateNestChart(inRange);
 
         if (nestStatusElement) {
-            nestStatusElement.textContent = (history && history.length > 0) ? `Loaded ${history.length} points` : "No data yet";
+            nestStatusElement.textContent = inRange.length > 0 ? `Loaded ${inRange.length} points` : "No data yet";
         }
         if (nestLastUpdatedElement) {
             nestLastUpdatedElement.textContent = new Date().toLocaleTimeString();
@@ -1090,7 +1097,7 @@ if (sumpRunsPerDayChartInstance) {
     fetchTempMonitorHistoricalData(initialHours);
     fetchSumpHistoricalData(initialHours); 
     refreshKatyWeatherChart(initialHours);
-    refreshNestData();
+    refreshNestData(initialHours);
     
     // ======================= CALL THE NEW ANALYTICS FETCH =======================
     fetchSumpAnalyticsData();
@@ -1106,7 +1113,7 @@ if (sumpRunsPerDayChartInstance) {
     setInterval(() => {
         fetchSumpHistoricalData(currentSumpRangeHours);
         refreshKatyWeatherChart(currentSumpRangeHours);
-        refreshNestData();
+        refreshNestData(currentSumpRangeHours);
     }, SUMP_CHART_REFRESH_INTERVAL_MS);
 
     // Diagnostics panel: render immediately, then keep the relative "X ago"
@@ -1125,6 +1132,7 @@ document.getElementById('history-range').addEventListener('change', function() {
     fetchTempMonitorHistoricalData(selectedHours); // Renamed function
     fetchSumpHistoricalData(selectedHours);      // New function
     refreshKatyWeatherChart(selectedHours);
+    refreshNestData(selectedHours);
 });
 
 function fetchTempMonitorHistoricalData(rangeHours = 1) {
@@ -1654,92 +1662,26 @@ async function fetchIemrePrecipData() {
     return precipMap;
 }
 
-// Fetches ~7 days of hourly station observations from NWS/NOAA and returns
-// them in the exact same shape the rest of the dashboard already expects:
-// Map<hourEpochMs, {temp: °F, precip: inches}>. Keeping that output contract
-// means nothing downstream (precip binning, outdoor-temp overlay, caching)
-// needed to change -- only the data source did.
+// Builds the precip map the sump chart's SinceRun/Precip overlay reads
+// (weatherData.get(hourTs)?.precip -- the only field anything still reads
+// off this map). This used to also fetch a parallel 7-day NWS temp series
+// here, but that became dead weight once the garage chart's outdoor-temp
+// overlay moved to source from the KATY 5-min feed directly (see
+// refreshKatyWeatherChart) -- nothing was reading .temp off this map
+// anymore, just 7 wasted requests every cache refresh. IEMRE is the only
+// source needed now.
 async function fetchMasterWeatherData() {
-    console.log("DEBUG: Fetching 7-day master weather data from NWS/NOAA.");
+    console.log("DEBUG: Fetching master weather (precip) data.");
     const weatherDataMap = new Map();
-    // Tracks the observation timestamp actually used for each hour bucket, so
-    // that if two reports (e.g. a routine + a special METAR) land in the same
-    // hour, we keep the more recent one rather than double-counting/overwriting
-    // with an older report.
-    const bucketObsTime = new Map();
 
     try {
-        const stationId = await resolveNwsStation();
-        if (!stationId) throw new Error("No NWS station resolved");
-
-        // Fetch one day at a time rather than one wide 7-day request. A single
-        // wide request can silently cap out at however many records the API
-        // returns per call -- we hit exactly this with a combined request,
-        // which only came back with ~3 days for a station reporting more often
-        // than hourly. Day-sized windows stay comfortably under any such cap
-        // regardless of reporting frequency, at the cost of 7 small requests
-        // instead of 1 (still trivial for an unauthenticated, keyless API).
-        for (let i = 0; i < 7; i++) {
-            const dayEnd = new Date(Date.now() - i * 24 * 3600000);
-            const dayStart = new Date(dayEnd.getTime() - 24 * 3600000);
-            const url = `https://api.weather.gov/stations/${stationId}/observations?start=${dayStart.toISOString()}&end=${dayEnd.toISOString()}&limit=500`;
-
-            try {
-                const res = await fetch(url, { headers: { 'Accept': 'application/geo+json' } });
-                if (!res.ok) throw new Error(`HTTP error ${res.status} for day offset ${i}`);
-                const json = await res.json();
-                const features = json.features || [];
-
-                for (const feature of features) {
-                    const p = feature.properties || {};
-                    if (!p.timestamp) continue;
-                    const obsTime = new Date(p.timestamp).getTime();
-                    const hourTs = Math.floor(obsTime / 3600000) * 3600000;
-
-                    // Only overwrite a bucket if this observation is newer than
-                    // whatever's already in it (station data isn't always exactly
-                    // hourly -- special reports can land mid-hour).
-                    if (bucketObsTime.has(hourTs) && bucketObsTime.get(hourTs) >= obsTime) continue;
-                    bucketObsTime.set(hourTs, obsTime);
-
-                    const tempC = p.temperature && p.temperature.value;
-                    const tempF = (tempC === null || tempC === undefined) ? null : (tempC * 9 / 5 + 32);
-
-                    // Precip itself is filled in separately below from IEMRE
-                    // (KATY's own gauge is confirmed out of service), so it's
-                    // just a placeholder here -- not read from this station.
-                    weatherDataMap.set(hourTs, { temp: tempF, precip: 0 });
-                }
-            } catch (dayError) {
-                console.error(`DEBUG: NWS observation fetch failed for day offset ${i}:`, dayError);
-            }
-
-            // Small stagger between requests -- not required by NWS (no API key,
-            // no published hard rate limit), just being a polite client.
-            if (i < 6) {
-                await new Promise(resolve => setTimeout(resolve, 150));
-            }
-        }
-
-        console.log(`DEBUG: NWS station ${stationId} returned ${weatherDataMap.size} hourly buckets across 7 daily requests.`);
-
-        // Merge in precip from IEMRE (radar-based, not dependent on KATY's
-        // broken gauge), overwriting just the precip field per hour bucket
-        // while leaving KATY's temp readings untouched. If an hour has an
-        // IEMRE precip value but no KATY temp entry (a gap in KATY's own
-        // reporting), still record it so precip isn't silently dropped.
         const precipMap = await fetchIemrePrecipData();
         for (const [hourTs, precipIn] of precipMap.entries()) {
-            const existing = weatherDataMap.get(hourTs);
-            if (existing) {
-                existing.precip = precipIn;
-            } else {
-                weatherDataMap.set(hourTs, { temp: null, precip: precipIn });
-            }
+            weatherDataMap.set(hourTs, { precip: precipIn });
         }
     } catch (error) {
-        console.error("DEBUG: NWS master weather fetch failed:", error);
-        diagState.lastError = `${new Date().toLocaleTimeString()} - NWS weather fetch: ${error.message}`;
+        console.error("DEBUG: Master weather (precip) fetch failed:", error);
+        diagState.lastError = `${new Date().toLocaleTimeString()} - Weather fetch: ${error.message}`;
         renderDiagnostics();
     }
 
