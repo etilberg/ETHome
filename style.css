@@ -36,6 +36,47 @@ section {
     box-shadow: 0 2px 4px rgba(0,0,0,0.5);
 }
 
+/* Collapsible sections (e.g. Diagnostics) -- <details>/<summary> gives free
+   click-to-expand behavior with no JS needed, styled to match the look of
+   a regular <section>/<h2> pairing above. */
+details.collapsible-section {
+    background-color: #1e1e1e;
+    margin-bottom: 20px;
+    padding: 15px 20px;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+details.collapsible-section summary {
+    color: #90caf9;
+    font-size: 1.5em;
+    font-weight: bold;
+    cursor: pointer;
+    list-style: none;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #333;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+details.collapsible-section[open] summary {
+    margin-bottom: 15px;
+}
+details.collapsible-section summary::-webkit-details-marker {
+    display: none;
+}
+details.collapsible-section summary::after {
+    content: '▸';
+    font-size: 0.8em;
+    transition: transform 0.2s ease;
+    margin-left: 10px;
+}
+details.collapsible-section[open] summary::after {
+    transform: rotate(90deg);
+}
+details.collapsible-section summary:hover {
+    color: #bbdefb;
+}
+
 /* Style for live data values container */
 .live-values {
     display: flex;
