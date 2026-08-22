@@ -66,14 +66,25 @@ polls on a schedule (Cron Trigger) and builds its own history in KV storage.
    device IDs). Update them if you ever re-authorize with a different
    project/device.
 8. Add two secrets in the Cloudflare dashboard (Settings -> Variables and
-   Secrets): `NEST_CLIENT_SECRET` and `NEST_REFRESH_TOKEN`.
-9. Create a KV namespace (Storage & Databases -> KV -> Create) and bind it
-   to this Worker as `NEST_KV` (Settings -> Bindings -> Add -> KV Namespace).
-10. Add a Cron Trigger (Settings -> Trigger Events -> Add Cron Trigger) of
-    `*/5 * * * *` (every 5 minutes). `wrangler.toml` declares this too, but
-    -- as with secrets and bindings -- this Git-integrated deploy has
-    previously needed the dashboard setting itself to actually take effect,
-    so verify it shows up there after deploying.
+   Secrets): `NEST_CLIENT_SECRET` and `NEST_REFRESH_TOKEN`. Secrets stay
+   dashboard-only by design and survive every deploy correctly -- only
+   bindings and observability needed the fix below.
+9. Create a KV namespace (Storage & Databases -> KV -> Create) named
+   `NEST_KV`, if one doesn't already exist. The binding itself is declared
+   in `wrangler.toml` (`[[kv_namespaces]]`, pointing at this namespace's
+   ID) -- **not** something to add by hand in Settings -> Bindings. We
+   originally documented it as a manual dashboard step and it kept getting
+   silently wiped every time a code push triggered a fresh deploy, because
+   anything not declared in `wrangler.toml` doesn't survive `wrangler
+   deploy`. If you ever recreate the namespace, update the `id` in
+   `wrangler.toml` to match.
+10. The Cron Trigger (`*/5 * * * *`) and Logs (`[observability]`) are also
+    declared in `wrangler.toml` for the same reason -- they should just
+    work after deploying, no separate dashboard step needed. If you ever
+    see Nest data stop updating, check Settings -> Trigger Events and
+    Settings -> Observability to confirm both are still showing enabled;
+    if either got manually toggled in the dashboard without a matching
+    `wrangler.toml` change, the next code deploy will reset it.
 
 **Note on refresh token handling:** if a refresh token is ever accidentally
 exposed (e.g. pasted somewhere it shouldn't be), revoke it immediately at
