@@ -2,29 +2,36 @@
 # thermostat polling/history).
 #
 # IMPORTANT: nothing sensitive is set in this file -- it's committed to a
-# public GitHub repo. All secrets and bindings below are configured directly
-# in the Cloudflare dashboard instead. See README.md for the full setup.
+# public GitHub repo. Secrets are still configured directly in the
+# Cloudflare dashboard (never here). Bindings and observability, by
+# contrast, ARE declared below -- we learned the hard way that anything
+# NOT declared in this file gets silently wiped every time a code push
+# triggers a fresh `wrangler deploy` (KV binding and Logs both reset
+# repeatedly this way before being added here). Whatever IS declared here
+# (like the Cron Trigger) survives deploys correctly, so declaring
+# everything possible here is the actual permanent fix, not a dashboard
+# setting to keep re-doing by hand.
 #
-# Secrets (Settings -> Variables and Secrets -> Add secret):
+# Secrets (Settings -> Variables and Secrets -> Add secret) -- NOT declared
+# here on purpose, these stay dashboard-only and are untouched by deploys:
 #   PARTICLE_TOKEN     -- Particle Cloud access token
 #   NEST_CLIENT_SECRET -- Google OAuth Client Secret for the Nest integration
 #   NEST_REFRESH_TOKEN -- long-lived Nest OAuth refresh token
-#
-# KV binding (Settings -> Bindings -> Add binding -> KV Namespace):
-#   Variable name: NEST_KV -- bound to a KV namespace you create under
-#   Storage & Databases -> KV. Used to store Nest's polled reading history
-#   (Nest's API only exposes current state, not history, so this Worker
-#   builds its own via the Cron Trigger below).
-#
-# Cron Trigger (Settings -> Trigger Events -> Add Cron Trigger):
-#   Also declared below for wrangler-based deploys, but as with secrets and
-#   bindings, this Git-integrated deploy has previously needed the dashboard
-#   setting itself (not just this file) to actually take effect -- verify it
-#   shows under Trigger Events after deploying.
 
 name = "ethome"
 main = "worker.js"
 compatibility_date = "2026-08-01"
 
+[observability]
+enabled = true
+
 [triggers]
 crons = ["*/5 * * * *"]
+
+# NEST_KV: stores Nest's polled reading history (Nest's API only exposes
+# current state, not history, so this Worker builds its own via the Cron
+# Trigger). The id below is this account's actual NEST_KV namespace ID --
+# safe to commit, a namespace ID isn't a credential.
+[[kv_namespaces]]
+binding = "NEST_KV"
+id = "a66a546ba7b84b1cadc79ae373588c62"
