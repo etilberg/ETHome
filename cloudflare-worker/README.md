@@ -89,10 +89,3 @@ upload flow used for the rest of the dashboard) automatically redeploys the
 Worker -- no separate manual deploy step. Secrets, bindings, and the Cron
 Trigger are untouched by code deploys and only need to be set once, or
 re-set if you ever rotate a credential.
-
-## Known cleanup item
-
-`worker.js` currently has a temporary `console.log` in the `fetch` handler
-(tagged `DIAG:`) added while debugging a Particle token issue. It's safe
-(only logs token length + 2 chars, never the full secret) but should be
-removed in a future pass now that it's served its purpose.
