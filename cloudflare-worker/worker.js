@@ -39,40 +39,58 @@ const NEST_DEVICE_NAME = "enterprises/c8083249-ed39-477e-8922-a2ee4a1eccdd/devic
 const NEST_HISTORY_KV_KEY = "nest:history";
 const NEST_HISTORY_RETENTION_MS = 7 * 24 * 3600 * 1000; // 7 days
 
-// Restrict CORS to the dashboard's own origin. Note: this stops casual
+// Restrict CORS to known dashboard origins. Note: this stops casual
 // browser-based abuse (another site embedding/calling this), but it is NOT
 // a real access-control boundary -- a non-browser client (curl, a script)
 // can ignore CORS entirely. The actual protection here is the narrow,
 // hardcoded route set above, not this header.
-const DASHBOARD_ORIGIN = "https://etilberg.github.io";
-const CORS_HEADERS = {
-    "Access-Control-Allow-Origin": DASHBOARD_ORIGIN,
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-};
+//
+// A CORS response can only ever name ONE origin, so supporting multiple
+// valid ones (custom domain + the original github.io URL, which may still
+// get used for testing) means checking the actual request's Origin header
+// against an allowlist and echoing back whichever one matches, rather than
+// a single hardcoded value -- a mismatch here doesn't error server-side,
+// it just makes the browser silently refuse to let the page's JS read an
+// otherwise-successful response.
+const ALLOWED_ORIGINS = [
+    "https://theethome.com",
+    "https://www.theethome.com",
+    "https://etilberg.github.io",
+];
+
+function corsHeadersFor(request) {
+    const origin = request.headers.get("Origin");
+    const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+    return {
+        "Access-Control-Allow-Origin": allowOrigin,
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+    };
+}
 
 export default {
     async fetch(request, env) {
         const url = new URL(request.url);
+        const corsHeaders = corsHeadersFor(request);
 
         if (request.method === "OPTIONS") {
-            return new Response(null, { headers: CORS_HEADERS });
+            return new Response(null, { headers: corsHeaders });
         }
 
         try {
             if (url.pathname === "/events/sump" && request.method === "GET") {
-                return proxySse(`https://api.particle.io/v1/devices/${SUMP_DEVICE_ID}/events/sumpData`, env);
+                return proxySse(`https://api.particle.io/v1/devices/${SUMP_DEVICE_ID}/events/sumpData`, env, corsHeaders);
             }
 
             if (url.pathname === "/events/temp" && request.method === "GET") {
-                return proxySse(`https://api.particle.io/v1/devices/${TEMP_DEVICE_ID}/events/GarageWebHook`, env);
+                return proxySse(`https://api.particle.io/v1/devices/${TEMP_DEVICE_ID}/events/GarageWebHook`, env, corsHeaders);
             }
 
             if (url.pathname === "/fridge-heater-state" && request.method === "GET") {
                 const resp = await fetch(
                     `https://api.particle.io/v1/devices/${TEMP_DEVICE_ID}/FridgeHeaterEnabled?access_token=${env.PARTICLE_TOKEN}`
                 );
-                return jsonResponse(await resp.text(), resp.status);
+                return jsonResponse(await resp.text(), resp.status, corsHeaders);
             }
 
             if (url.pathname === "/fridge-heater-toggle" && request.method === "POST") {
@@ -85,7 +103,7 @@ export default {
                     headers: { "Content-Type": "application/x-www-form-urlencoded" },
                     body: `access_token=${env.PARTICLE_TOKEN}&args=${action}`,
                 });
-                return jsonResponse(await resp.text(), resp.status);
+                return jsonResponse(await resp.text(), resp.status, corsHeaders);
             }
 
             if (url.pathname === "/reset-device" && request.method === "POST") {
@@ -94,7 +112,7 @@ export default {
                     headers: { "Content-Type": "application/x-www-form-urlencoded" },
                     body: `access_token=${env.PARTICLE_TOKEN}&args=reset`,
                 });
-                return jsonResponse(await resp.text(), resp.status);
+                return jsonResponse(await resp.text(), resp.status, corsHeaders);
             }
 
             // Both Nest routes serve from KV rather than calling Google live on
@@ -105,17 +123,17 @@ export default {
             if (url.pathname === "/nest/current" && request.method === "GET") {
                 const history = await readNestHistory(env);
                 const latest = history.length > 0 ? history[history.length - 1] : null;
-                return jsonResponse(JSON.stringify({ latest }), 200);
+                return jsonResponse(JSON.stringify({ latest }), 200, corsHeaders);
             }
 
             if (url.pathname === "/nest/history" && request.method === "GET") {
                 const history = await readNestHistory(env);
-                return jsonResponse(JSON.stringify({ history }), 200);
+                return jsonResponse(JSON.stringify({ history }), 200, corsHeaders);
             }
 
-            return new Response("Not found", { status: 404, headers: CORS_HEADERS });
+            return new Response("Not found", { status: 404, headers: corsHeaders });
         } catch (err) {
-            return jsonResponse(JSON.stringify({ error: err.message }), 500);
+            return jsonResponse(JSON.stringify({ error: err.message }), 500, corsHeaders);
         }
     },
 
@@ -130,12 +148,12 @@ export default {
 // Streams a Particle SSE event feed straight through, attaching the real
 // token server-side. EventSource in the browser can't send custom headers,
 // so the token has to be added here rather than passed in by the client.
-async function proxySse(upstreamUrl, env) {
+async function proxySse(upstreamUrl, env, corsHeaders) {
     const resp = await fetch(`${upstreamUrl}?access_token=${env.PARTICLE_TOKEN}`);
     return new Response(resp.body, {
         status: resp.status,
         headers: {
-            ...CORS_HEADERS,
+            ...corsHeaders,
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
@@ -143,10 +161,10 @@ async function proxySse(upstreamUrl, env) {
     });
 }
 
-function jsonResponse(bodyText, status) {
+function jsonResponse(bodyText, status, corsHeaders) {
     return new Response(bodyText, {
         status,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 }
 
