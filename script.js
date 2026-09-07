@@ -1463,16 +1463,21 @@ function fetchSumpHistoricalData(rangeHours) {
             // Bar width scales with the selected range so precip bars stay readable:
             //   <=24hr -> hourly bins, 48hr -> 3-hour bins, 1 week -> daily bins
             getOrFetchMasterWeatherData().then(weatherData => {
-                if (sumpTimeHistory.length === 0) return;
-
                 const binSizeMs = getSumpPrecipBinSizeMs(rangeHours);
                 const getBinStart = (ts) => Math.floor(new Date(ts).getTime() / binSizeMs) * binSizeMs;
 
                 const bins = new Map();
 
-                // 1. Create bins for the ENTIRE time range first
-                const startTime = getBinStart(sumpTimeHistory[0]);
-                const endTime = getBinStart(sumpTimeHistory[sumpTimeHistory.length - 1]);
+                // 1. Create bins across the actual SELECTED time window (now
+                // back to rangeHours ago) -- NOT bounded by the sump CSV's own
+                // oldest/newest timestamps. Precip is independent of whether
+                // the pump itself has recent activity to report; a long
+                // pump-inactive stretch shouldn't blank out the precip bars
+                // for that same window (this used to bail out entirely via an
+                // early return whenever sumpTimeHistory was empty).
+                const now = Date.now();
+                const startTime = getBinStart(now - rangeHours * 3600000);
+                const endTime = getBinStart(now);
 
                 for (let binStart = startTime; binStart <= endTime; binStart += binSizeMs) {
                     // Sum every hourly precip reading that falls inside this bin
@@ -1484,7 +1489,10 @@ function fetchSumpHistoricalData(rangeHours) {
                     bins.set(binStart, { sinceRunValues: [], precip: precipSum });
                 }
 
-                // 2. Now, add the sump data into the appropriate, existing bins
+                // 2. Add whatever sump data IS available into the matching
+                // bins -- there may be none at all if the pump hasn't run or
+                // logged recently, which is fine; the precip bars still
+                // render across the full window regardless.
                 for (let i = 0; i < sumpTimeHistory.length; i++) {
                     const binKey = getBinStart(sumpTimeHistory[i]);
                     if (bins.has(binKey)) {
