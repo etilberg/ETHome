@@ -59,6 +59,34 @@ let currentSumpRangeHours = 4;
 // How often to rebuild the sump charts from source data instead of live-appending.
 const SUMP_CHART_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
+// --- Sump "Time Since Last Cycle" / "Previous Cycle Gap" ---
+// lastSumpCycleTimestamp is the epoch ms of when the last cycle started.
+// Seeded from the 90-day CSV on load (processSumpAnalytics), then kept in
+// sync with the device's own truth on every live sumpData event (which
+// reports timeSinceRun freshly each time) -- but the actual *displayed*
+// value ticks continuously client-side (see the setInterval in
+// DOMContentLoaded) rather than only updating once per ~2-min device
+// publish, so it stays accurate between events instead of just at
+// whatever cadence the device happens to report.
+let lastSumpCycleTimestamp = null;
+// previousSumpCycleGapMs is a static value (doesn't tick) -- the gap
+// between the two most recent completed cycles, for comparison against
+// the current (still-ticking) gap.
+let previousSumpCycleGapMs = null;
+
+// Formats a duration in ms as e.g. "42 min", "3.2 hrs", or "1.4 days",
+// auto-picking the unit based on magnitude rather than always showing raw
+// minutes (which gets unwieldy for multi-day gaps).
+function formatDurationAutoScale(ms) {
+    if (ms === null || ms === undefined || isNaN(ms) || ms < 0) return '--';
+    const minutes = ms / 60000;
+    if (minutes < 60) return `${minutes.toFixed(1)} min`;
+    const hours = minutes / 60;
+    if (hours < 24) return `${hours.toFixed(1)} hrs`;
+    const days = hours / 24;
+    return `${days.toFixed(1)} days`;
+}
+
 // --- Chart Instance Variables ---
 let fridgeChartInstance, freezerChartInstance, garageChartInstance;
 let sumpTempChartInstance, sumpRuntimeChartInstance, sumpSinceRunChartInstance;
@@ -256,7 +284,11 @@ function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)')
                     beginAtZero: false,
                     title: {
                         display: true,
-                        text: yLabel
+                        text: yLabel,
+                        color: borderColor
+                    },
+                    ticks: {
+                        color: borderColor
                     }
                 }
             },
@@ -546,6 +578,7 @@ async function refreshNestData(rangeHours) {
 
         updateNestLiveCards(latest);
         updateNestChart(inRange);
+        updateNestDutyCycle(inRange);
 
         if (nestStatusElement) {
             nestStatusElement.textContent = inRange.length > 0 ? `Loaded ${inRange.length} points` : "No data yet";
@@ -595,6 +628,28 @@ function updateNestChart(history) {
     nestChartInstance.data.datasets[2].data = history.map(r => r.hvacStatus === 'HEATING' ? 1 : 0);
     nestChartInstance.data.datasets[3].data = history.map(r => r.hvacStatus === 'COOLING' ? 1 : 0);
     nestChartInstance.update();
+}
+
+// % of readings in the currently-selected range where the HVAC was actively
+// heating/cooling. A simple count-based ratio rather than time-weighted --
+// accurate enough given the ~5-minute even spacing of Nest's own poll
+// cadence, without needing to account for uneven gaps.
+function updateNestDutyCycle(history) {
+    const heatEl = document.getElementById('nest-duty-heat');
+    const coolEl = document.getElementById('nest-duty-cool');
+    if (!heatEl || !coolEl) return;
+
+    if (!history || history.length === 0) {
+        heatEl.textContent = '--%';
+        coolEl.textContent = '--%';
+        return;
+    }
+
+    const heatingCount = history.filter(r => r.hvacStatus === 'HEATING').length;
+    const coolingCount = history.filter(r => r.hvacStatus === 'COOLING').length;
+
+    heatEl.textContent = `${Math.round((heatingCount / history.length) * 100)}%`;
+    coolEl.textContent = `${Math.round((coolingCount / history.length) * 100)}%`;
 }
 
 // Collapses a time-sorted array of {t, ...} points down to at most one per
@@ -801,12 +856,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 position: 'right',
                 title: {
                     display: true,
-                    text: 'Heater Status'
+                    text: 'Heater Status',
+                    color: 'rgb(100, 50, 0.3)'
                 },
                 min: 0,
                 max: 1,
                 ticks: {
-                    stepSize: 1
+                    stepSize: 1,
+                    color: 'rgb(100, 50, 0.3)'
                 },
                 grid: {
                     drawOnChartArea: false
@@ -878,7 +935,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     position: 'left',
                     title: {
                         display: true,
-                        text: 'Minutes'
+                        text: 'Minutes',
+                        color: 'rgb(201, 203, 207)'
+                    },
+                    ticks: {
+                        color: 'rgb(201, 203, 207)'
                     }
                 },
                 y_precip: { // Configuration for the new right Y-axis (Precipitation)
@@ -887,13 +948,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     position: 'right',
                     title: {
                         display: true,
-                        text: 'Precipitation (in)'
+                        text: 'Precipitation (in)',
+                        color: 'rgba(54, 162, 235, 1)'
                     },
                     grid: {
                         drawOnChartArea: false, // Only draw grid for the left axis
                     },
                     ticks: {
-                        beginAtZero: true
+                        beginAtZero: true,
+                        color: 'rgba(54, 162, 235, 1)'
                     }
                 }
             },
@@ -962,13 +1025,15 @@ if (sumpRunsPerDayChartInstance) {
                     x: { type: 'time' },
                     y_humidity: {
                         type: 'linear', position: 'left', min: 0, max: 100,
-                        title: { display: true, text: 'Humidity (%)' }
+                        title: { display: true, text: 'Humidity (%)', color: 'rgb(54, 162, 235)' },
+                        ticks: { color: 'rgb(54, 162, 235)' }
                     },
                     y_pressure: {
                         type: 'linear', position: 'right', offset: true,
                         min: 28.2, max: 31.5,
-                        title: { display: true, text: 'Pressure (inHg)' },
-                        grid: { drawOnChartArea: false }
+                        title: { display: true, text: 'Pressure (inHg)', color: 'rgb(201, 203, 207)' },
+                        grid: { drawOnChartArea: false },
+                        ticks: { color: 'rgb(201, 203, 207)' }
                     }
                 },
                 plugins: {
@@ -1017,8 +1082,12 @@ if (sumpRunsPerDayChartInstance) {
                 scales: {
                     x: { type: 'time' },
                     y_wind: {
+                        // Shared by Speed, Gusts, and Direction -- colored to
+                        // match Wind Speed (the primary series) since a
+                        // shared axis can't match every line at once.
                         type: 'linear', position: 'left', min: 0,
-                        title: { display: true, text: 'Wind (mph)' }
+                        title: { display: true, text: 'Wind (mph)', color: 'rgb(75, 192, 192)' },
+                        ticks: { color: 'rgb(75, 192, 192)' }
                     }
                 },
                 plugins: {
@@ -1065,12 +1134,14 @@ if (sumpRunsPerDayChartInstance) {
                     x: { type: 'time' },
                     y_temp: {
                         type: 'linear', position: 'left',
-                        title: { display: true, text: 'Temp (°F)' }
+                        title: { display: true, text: 'Temp (°F)', color: 'rgb(255, 206, 86)' },
+                        ticks: { color: 'rgb(255, 206, 86)' }
                     },
                     y_humidity: {
                         type: 'linear', position: 'right', min: 0, max: 100,
-                        title: { display: true, text: 'Humidity (%)' },
-                        grid: { drawOnChartArea: false }
+                        title: { display: true, text: 'Humidity (%)', color: 'rgb(54, 162, 235)' },
+                        grid: { drawOnChartArea: false },
+                        ticks: { color: 'rgb(54, 162, 235)' }
                     },
                     y_hvac: {
                         display: false, min: 0, max: 1
@@ -1121,6 +1192,15 @@ if (sumpRunsPerDayChartInstance) {
     // ticking even when no new event has come in.
     renderDiagnostics();
     setInterval(renderDiagnostics, 30 * 1000);
+
+    // "Time Since Last Cycle" ticks continuously client-side rather than
+    // only updating once per live sumpData event (see connectSumpMonitorSSE
+    // and processSumpAnalytics for how lastSumpCycleTimestamp gets set).
+    setInterval(() => {
+        if (sumpSinceRunElement && lastSumpCycleTimestamp !== null) {
+            sumpSinceRunElement.textContent = formatDurationAutoScale(Date.now() - lastSumpCycleTimestamp);
+        }
+    }, 1000);
 });
 
 // ... (rest of your script.js: history-range listener, resetZoomOnAllCharts, fetch functions, SSE connection functions) ...
@@ -1574,7 +1654,16 @@ function connectSumpMonitorSSE() {
             if (jsonData.temp !== undefined) sumpTempElement.textContent = jsonData.temp.toFixed(1);
             if (jsonData.extPower !== undefined) sumpPowerElement.textContent = jsonData.extPower.toFixed(2);
             if (jsonData.sumpRunTime !== undefined) sumpRuntimeElement.textContent = jsonData.sumpRunTime.toFixed(1);
-            if (jsonData.timeSinceRun !== undefined) sumpSinceRunElement.textContent = jsonData.timeSinceRun.toFixed(1);
+            // Resync our own "last cycle started" timestamp against the
+            // device's own freshly-computed timeSinceRun on every event,
+            // rather than writing the display text directly -- the actual
+            // displayed value ticks continuously client-side instead (see
+            // the setInterval in DOMContentLoaded), so it stays accurate
+            // between events instead of only updating once per ~2-min
+            // device publish.
+            if (jsonData.timeSinceRun !== undefined) {
+                lastSumpCycleTimestamp = timestamp.getTime() - jsonData.timeSinceRun * 60000;
+            }
 
             sumpMonitorLastUpdatedElement.textContent = timestamp.toLocaleTimeString();
             sumpMonitorStatusElement.textContent = "Receiving data";
@@ -1819,7 +1908,30 @@ function processSumpAnalytics(sumpData) {
     // --- END OF FIX ---
 
     console.log(`DEBUG: Processed ${totalRuns} total sump runs across ${runsByDay.size} days.`);
-    
+
+    // Seed "Time Since Last Cycle" / "Previous Cycle Gap" from the CSV
+    // history -- this is what makes them show a real value immediately on
+    // load rather than waiting for the first live sumpData event, and is
+    // also the only source for "Previous Cycle Gap" at all (the device
+    // doesn't report that itself).
+    const cycleTimestamps = sumpData
+        .filter(d => d.runTime > 0)
+        .map(d => d.ts.getTime())
+        .sort((a, b) => a - b);
+    if (cycleTimestamps.length > 0) {
+        lastSumpCycleTimestamp = cycleTimestamps[cycleTimestamps.length - 1];
+    }
+    if (cycleTimestamps.length > 1) {
+        previousSumpCycleGapMs = cycleTimestamps[cycleTimestamps.length - 1] - cycleTimestamps[cycleTimestamps.length - 2];
+    }
+    if (sumpSinceRunElement && lastSumpCycleTimestamp !== null) {
+        sumpSinceRunElement.textContent = formatDurationAutoScale(Date.now() - lastSumpCycleTimestamp);
+    }
+    const previousGapEl = document.getElementById('sump-previous-gap');
+    if (previousGapEl) {
+        previousGapEl.textContent = formatDurationAutoScale(previousSumpCycleGapMs);
+    }
+
     // Sort the labels chronologically before displaying
     const labels = [...runsByDay.keys()].sort();
     const data = labels.map(day => runsByDay.get(day));
@@ -1940,6 +2052,8 @@ async function fetchFridgeHeaterState() {
 function updateFridgeButton(isEnabled) {
   fridgeButton.textContent = isEnabled ? "Disable Fridge Heater" : "Enable Fridge Heater";
   fridgeStatus.textContent = `Fridge Heater is ${isEnabled ? "Enabled" : "Disabled"}`;
+  const autoStatusEl = document.getElementById('live-heater-auto-status');
+  if (autoStatusEl) autoStatusEl.textContent = isEnabled ? "Enabled" : "Disabled";
 }
 
 async function toggleFridgeHeater() {
