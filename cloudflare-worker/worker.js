@@ -64,7 +64,7 @@ function corsHeadersFor(request) {
     return {
         "Access-Control-Allow-Origin": allowOrigin,
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Headers": "Content-Type, X-Action-Pin",
     };
 }
 
@@ -94,6 +94,9 @@ export default {
             }
 
             if (url.pathname === "/fridge-heater-toggle" && request.method === "POST") {
+                if (!checkActionPin(request, env)) {
+                    return jsonResponse(JSON.stringify({ error: "Invalid or missing PIN" }), 403, corsHeaders);
+                }
                 const body = await request.json().catch(() => ({}));
                 // Strict allowlist -- never pass the caller's value straight
                 // through to Particle's `args` field.
@@ -107,6 +110,9 @@ export default {
             }
 
             if (url.pathname === "/reset-device" && request.method === "POST") {
+                if (!checkActionPin(request, env)) {
+                    return jsonResponse(JSON.stringify({ error: "Invalid or missing PIN" }), 403, corsHeaders);
+                }
                 const resp = await fetch(`https://api.particle.io/v1/devices/${TEMP_DEVICE_ID}/reset`, {
                     method: "POST",
                     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -166,6 +172,18 @@ function jsonResponse(bodyText, status, corsHeaders) {
         status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+}
+
+// Lightweight deterrent for the two state-changing routes (heater toggle,
+// device reset), not a strong security boundary -- no rate-limiting or
+// lockout on repeated guesses. If ACTION_PIN isn't set as a Cloudflare
+// secret yet, this fails closed (blocks both actions entirely) rather than
+// fails open, since `undefined !== providedPin` is true for any input --
+// so ACTION_PIN must be set as part of deploying this, not an optional
+// afterthought.
+function checkActionPin(request, env) {
+    const providedPin = request.headers.get("X-Action-Pin");
+    return providedPin !== null && providedPin === env.ACTION_PIN;
 }
 
 // --- Nest helpers ---

@@ -4,7 +4,7 @@ A single-page dashboard for monitoring a house: a Particle-based fridge/freezer
 sensor, a Particle-based sump pump monitor, local weather, and a Google Nest
 thermostat -- all on one page, hosted for free on GitHub Pages.
 
-**Live site:** https://etilberg.github.io/ETHome/
+**Live site:** https://theethome.com/
 
 ## What it shows
 
@@ -112,10 +112,19 @@ HTML/CSS/JS loading Chart.js and a couple of small plugins from a CDN.
   running and conditions are stable -- that's real data, not a stalled poll
   (verified against the Worker's own Cron Trigger logs, which run reliably
   every 5 minutes with no gaps).
+- **The sump pump can genuinely go a week or more between cycles** during
+  dry stretches -- "Time Since Last Cycle" showing several days, or the
+  Sump CSV Freshness diagnostic showing 100+ hours, isn't necessarily a
+  broken logging pipeline. Cross-check against real-world knowledge of
+  whether it's actually been dry before assuming something's wrong.
+- **The sump SinceRun/Precip chart used to go blank whenever the pump
+  hadn't logged anything within the selected range** (a real bug, now
+  fixed) -- its bins were anchored to the sump CSV's own oldest/newest
+  timestamps rather than the actual selected time window, so a long
+  pump-inactive stretch blanked out the precip bars too, even though
+  precip data is entirely independent of pump activity. Bins are now
+  anchored to the real selected window (`now` back to `rangeHours` ago).
 
 ## Roadmap / TODO
 
-- Move the "Enable Fridge Heater" button into the Diagnostics section, and
-  move its current on/off status text up into the Fridge/Freezer Monitor's
-  live-value cards (next to the existing "Heater Off" run-time box) --
-  this would let the standalone Controls section be removed entirely.
+No open items right now.

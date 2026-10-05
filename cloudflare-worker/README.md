@@ -31,6 +31,25 @@ secrets, never in the repo or the browser.
 4. Note the deployed Worker's URL (e.g. `https://ethome.<your-subdomain>.workers.dev`)
    and put it in `config.js` as `PARTICLE_PROXY_BASE_URL`.
 
+## One-time setup: PIN protection for the Reset/Heater-toggle buttons
+
+The `/reset-device` and `/fridge-heater-toggle` routes check a PIN before
+doing anything, since they're state-changing actions on real hardware and
+the site is on a public domain. This is a lightweight deterrent (a shared
+secret checked server-side), not a strong security boundary -- no
+rate-limiting or lockout on repeated guesses.
+
+1. Add a secret in the Cloudflare dashboard (Settings -> Variables and
+   Secrets): name `ACTION_PIN`, value whatever PIN you want to use.
+2. **This one isn't optional to skip** -- unlike the other secrets, if
+   `ACTION_PIN` isn't set, the check fails closed (blocks both actions
+   entirely) rather than fails open, so set it as part of this same
+   deploy, not as a later afterthought.
+3. Nothing to change in `config.js` -- the frontend just prompts for the
+   PIN via a plain `prompt()` dialog each time either button is clicked and
+   sends it as a header (`X-Action-Pin`); no PIN is stored anywhere in the
+   repo or the browser between uses.
+
 ## One-time setup: Nest thermostat
 
 Nest's API only exposes *current* device state, not history, so this Worker

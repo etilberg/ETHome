@@ -515,6 +515,15 @@ async function refreshKatyWeatherChart(rangeHours) {
         }
     }
 
+    // Same overlay, same source, on the Indoor Climate (Nest) chart.
+    if (nestChartInstance) {
+        const nestOutdoorDataset = nestChartInstance.data.datasets.find(d => d.label === "Outdoor Temp (°F)");
+        if (nestOutdoorDataset) {
+            nestOutdoorDataset.data = points.filter(p => p.temp !== null).map(p => ({ x: p.t, y: p.temp }));
+            nestChartInstance.update();
+        }
+    }
+
     if (katyWindChartInstance) {
         katyWindChartInstance.data.labels = points.map(p => new Date(p.t));
         katyWindChartInstance.data.datasets[0].data = points.map(p => p.windSpeed);
@@ -528,12 +537,16 @@ async function refreshKatyWeatherChart(rangeHours) {
         const hourlyDirPoints = sampleOnePerHour(points.filter(p => p.windDir !== null && p.windSpeed !== null));
         katyWindChartInstance.data.datasets[2].data = hourlyDirPoints.map(p => ({ x: p.t, y: p.windSpeed }));
         // windDir is the compass bearing the wind is blowing FROM (standard
-        // meteorological convention), so rotating the icon by windDir+180
-        // makes the arrow point in the direction the wind is actually
-        // blowing TOWARD. Each icon is pre-rendered already rotated (see
+        // meteorological convention). A plain-canvas rotation-direction
+        // derivation says windDir+180 should point the icon toward where
+        // the wind is blowing TO -- but a real-world check (wind from the
+        // south blowing north) showed the arrow pointing backwards, meaning
+        // Chart.js's pointStyle canvas rendering introduces a flip that
+        // derivation didn't account for. Using the raw bearing (no +180)
+        // corrects for that. Each icon is pre-rendered already rotated (see
         // createWindArrowIcon), rather than using Chart.js's pointRotation
         // on a built-in shape.
-        katyWindChartInstance.data.datasets[2].pointStyle = hourlyDirPoints.map(p => createWindArrowIcon((p.windDir + 180) % 360));
+        katyWindChartInstance.data.datasets[2].pointStyle = hourlyDirPoints.map(p => createWindArrowIcon(p.windDir % 360));
 
         katyWindChartInstance.update();
     }
@@ -622,11 +635,14 @@ function updateNestLiveCards(latest) {
 function updateNestChart(history) {
     if (!nestChartInstance) return;
 
+    // Index 1 (Outdoor Temp) is intentionally skipped here -- it's on its
+    // own independent timestamps (parsing: false), populated separately in
+    // refreshKatyWeatherChart, same pattern as the Garage chart's overlay.
     nestChartInstance.data.labels = history.map(r => new Date(r.t));
     nestChartInstance.data.datasets[0].data = history.map(r => r.indoorTemp);
-    nestChartInstance.data.datasets[1].data = history.map(r => r.humidity);
-    nestChartInstance.data.datasets[2].data = history.map(r => r.hvacStatus === 'HEATING' ? 1 : 0);
-    nestChartInstance.data.datasets[3].data = history.map(r => r.hvacStatus === 'COOLING' ? 1 : 0);
+    nestChartInstance.data.datasets[2].data = history.map(r => r.humidity);
+    nestChartInstance.data.datasets[3].data = history.map(r => r.hvacStatus === 'HEATING' ? 1 : 0);
+    nestChartInstance.data.datasets[4].data = history.map(r => r.hvacStatus === 'COOLING' ? 1 : 0);
     nestChartInstance.update();
 }
 
@@ -1113,6 +1129,20 @@ if (sumpRunsPerDayChartInstance) {
                 labels: [],
                 datasets: [
                     { label: 'Indoor Temp (°F)', data: [], borderColor: 'rgb(255, 206, 86)', yAxisID: 'y_temp', pointRadius: 0, borderWidth: 2, tension: 0.1 },
+                    {
+                        // Same source, color, and independent-timestamp
+                        // approach as the Garage chart's Outdoor Temp overlay
+                        // (parsing: false + {x,y} points set in
+                        // refreshKatyWeatherChart) -- shares the y_temp axis
+                        // with Indoor Temp rather than getting its own scale,
+                        // same choice already made for the Garage chart, and
+                        // consistent since both are °F. The axis itself stays
+                        // colored to match Indoor Temp (the primary series),
+                        // same convention as the Wind chart's shared axis.
+                        label: 'Outdoor Temp (°F)', data: [], parsing: false,
+                        borderColor: 'rgb(255, 99, 132)', yAxisID: 'y_temp',
+                        pointRadius: 0, borderWidth: 2, tension: 0.4
+                    },
                     { label: 'Humidity (%)', data: [], borderColor: 'rgb(54, 162, 235)', yAxisID: 'y_humidity', pointRadius: 0, borderWidth: 2, tension: 0.1 },
                     {
                         label: 'Heating', data: [], yAxisID: 'y_hvac',
@@ -1940,12 +1970,33 @@ function processSumpAnalytics(sumpData) {
         previousGapEl.textContent = formatDurationAutoScale(previousSumpCycleGapMs);
     }
 
-    // Sort the labels chronologically before displaying
-    const labels = [...runsByDay.keys()].sort();
-    const data = labels.map(day => runsByDay.get(day));
+    // Build a DENSE, continuous day-by-day series -- from the earliest day
+    // in the fetched window through TODAY (inclusive) -- rather than only
+    // the sparse set of days that actually had a cycle. Previously, days
+    // with zero cycles never got a runsByDay entry at all, so the chart's
+    // x-axis just stopped at the last day with any activity instead of
+    // extending to today with zero-height bars -- misleading during a long
+    // pump-quiet stretch, since it looked like the data had ended rather
+    // than the pump being genuinely idle.
+    const allTimestamps = sumpData.map(d => d.ts.getTime());
+    const earliestTs = allTimestamps.reduce((min, t) => t < min ? t : min, allTimestamps[0]);
+    const startDate = new Date(earliestTs);
+    startDate.setHours(0, 0, 0, 0);
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
 
-    // Calculate the overall average
-    const avgRunsPerDay = runsByDay.size > 0 ? (totalRuns / runsByDay.size).toFixed(1) : 0;
+    const labels = [];
+    const data = [];
+    for (let d = new Date(startDate); d <= todayDate; d.setDate(d.getDate() + 1)) {
+        const dayKey = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+        labels.push(dayKey);
+        data.push(runsByDay.get(dayKey) || 0);
+    }
+
+    // Average per day now divides by the full dense day count (including
+    // zero-cycle days), not just days that had activity -- consistent with
+    // what the chart now actually shows.
+    const avgRunsPerDay = labels.length > 0 ? (totalRuns / labels.length).toFixed(1) : 0;
 
     if (sumpRunsPerDayChartInstance) {
         sumpRunsPerDayChartInstance.data.labels = labels;
@@ -2057,6 +2108,18 @@ async function fetchFridgeHeaterState() {
   }
 }
 
+// Lightweight deterrent, not a strong security boundary: prompts for a PIN
+// before Reset/Heater-toggle actions and sends it to the Worker, which
+// checks it against a server-side secret (ACTION_PIN, see
+// cloudflare-worker/README.md). No rate-limiting or lockout on repeated
+// guesses -- reasonable for a personal hobby project now that the site is
+// on a public domain, not meant to withstand a determined attacker.
+// Prompts every time rather than remembering the PIN (e.g. in
+// localStorage), so a shared/already-open browser doesn't bypass it.
+function promptForActionPin() {
+  return prompt("Enter PIN to confirm this action:");
+}
+
 function updateFridgeButton(isEnabled) {
   fridgeButton.textContent = isEnabled ? "Disable Fridge Heater" : "Enable Fridge Heater";
   fridgeStatus.textContent = `Fridge Heater is ${isEnabled ? "Enabled" : "Disabled"}`;
@@ -2069,14 +2132,22 @@ async function toggleFridgeHeater() {
   // If the button text includes "Enable", the action is "on". Otherwise, it's "off".
   const action = fridgeButton.textContent.includes("Enable") ? "on" : "off";
 
+  const pin = promptForActionPin();
+  if (pin === null) return; // user cancelled the prompt
+
   try {
     const resp = await fetch(`${PARTICLE_PROXY_BASE_URL}/fridge-heater-toggle`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-Action-Pin": pin,
       },
       body: JSON.stringify({ action })
     });
+    if (resp.status === 403) {
+      alert("Incorrect PIN.");
+      return;
+    }
     const data = await resp.json();
     if (data && data.return_value !== undefined) {
       // After a successful command, re-fetch the state to update the button.
@@ -2105,7 +2176,10 @@ if (resetButton) {
     if (!confirm("Are you sure you want to reset the Photon device?\n\nThis will:\n• Restart the device (~30 seconds)\n• Interrupt data collection briefly\n• Trigger automatic sensor reconnection if needed\n\nContinue?")) {
       return;
     }
-    
+
+    const pin = promptForActionPin();
+    if (pin === null) return; // user cancelled the prompt
+
     resetButton.disabled = true;
     resetButton.textContent = "🔄 Resetting...";
     resetStatus.textContent = "Reset in progress...";
@@ -2117,8 +2191,19 @@ if (resetButton) {
       // Call the reset FUNCTION on the device, via the Cloudflare Worker
       // proxy (see cloudflare-worker/) rather than api.particle.io directly.
       const resp = await fetch(`${PARTICLE_PROXY_BASE_URL}/reset-device`, {
-        method: "POST"
+        method: "POST",
+        headers: {
+          "X-Action-Pin": pin,
+        },
       });
+
+      if (resp.status === 403) {
+        resetStatus.textContent = "❌ Incorrect PIN.";
+        resetStatus.style.color = "red";
+        resetButton.disabled = false;
+        resetButton.textContent = "🔄 Reset Photon Device";
+        return;
+      }
       
       const data = await resp.json();
       console.log("Response from Particle:", data);

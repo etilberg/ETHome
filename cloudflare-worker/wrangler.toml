@@ -17,6 +17,10 @@
 #   PARTICLE_TOKEN     -- Particle Cloud access token
 #   NEST_CLIENT_SECRET -- Google OAuth Client Secret for the Nest integration
 #   NEST_REFRESH_TOKEN -- long-lived Nest OAuth refresh token
+#   ACTION_PIN         -- PIN required to call /reset-device or
+#                         /fridge-heater-toggle. Unlike the others, this one
+#                         fails CLOSED if unset (blocks both actions), so
+#                         set it as part of this same deploy.
 
 name = "ethome"
 main = "worker.js"
