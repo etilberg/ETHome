@@ -39,6 +39,23 @@ const SUMP_HISTORY_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ
   Click File > Share > Publish to Web
   Select the correct sheet and CSV format*/
 
+// -- Aquarium Monitor (BL602 / Adafruit IO) --
+// Make your feeds public in Adafruit IO (Feed → Feed Info → Visibility → Public)
+// Replace "your_adafruit_username" with your actual AIO username.
+const AQUARIUM_WATER_CSV_URL   = 'https://io.adafruit.com/your_adafruit_username/feeds/aquarium-water-temp/csv?limit=500';
+const AQUARIUM_AMBIENT_CSV_URL = 'https://io.adafruit.com/your_adafruit_username/feeds/aquarium-ambient-temp/csv?limit=500';
+
+// Alarm display thresholds — for coloring the live reading on the card
+// (actual push alerts come from the BL602 firmware)
+const AQUARIUM_WATER_HIGH_F  = 89.0;
+const AQUARIUM_WATER_LOW_F   = 80.0;
+
+// Sentinel value the firmware posts when a sensor is offline
+const AQUARIUM_OFFLINE_VALUE = -999;
+
+// Logging interval (minutes) — used by the staleness indicator
+const LOG_INTERVAL_MIN = 5;
+
 // --- End of Configuration ---
 console.log("DEBUG: config.js loaded.");
 if (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined') { // Cleanup if old variable exists

@@ -236,6 +236,41 @@
 </details>
 
 
+    <!-- ═══ Aquarium Monitor Card ═══ -->
+    <section class="card" id="aquarium-card">
+      <div class="card-header">
+        <h2>Aquarium Monitor</h2>
+        <span id="aquarium-status" class="status-badge">Loading...</span>
+      </div>
+
+      <div class="live-readings" style="display:flex;gap:1.5rem;flex-wrap:wrap;margin:0.75rem 0;">
+
+        <!-- Water temp -->
+        <div class="temp-card">
+          <div class="temp-card-label">Water Temp</div>
+          <div class="temp-card-current" id="aquarium-water-live">--</div>
+          <div class="temp-card-unit">°F</div>
+          <div class="temp-card-stats" id="aquarium-water-stats">H: --° / L: --°</div>
+        </div>
+
+        <!-- Ambient temp -->
+        <div class="temp-card">
+          <div class="temp-card-label">Ambient Temp</div>
+          <div class="temp-card-current" id="aquarium-ambient-live">--</div>
+          <div class="temp-card-unit">°F</div>
+          <div class="temp-card-stats" id="aquarium-ambient-stats">H: --° / L: --°</div>
+        </div>
+
+      </div>
+
+      <div class="card-footer" style="font-size:0.8rem;color:var(--text-muted)">
+        Last reading: <span id="aquarium-reading-age">--</span>
+        &nbsp;·&nbsp;
+        Alarms: water <span id="aquarium-alarm-range">80–89°F</span>
+      </div>
+    </section>
+    <!-- ═══ End Aquarium Monitor Card ═══ -->
+
     <!-- PUT NOTHING AFTER THESE LINES -->
     <script src="config.js"></script>
     <script src="script.js"></script>

@@ -1199,7 +1199,8 @@ if (sumpRunsPerDayChartInstance) {
     fetchSumpHistoricalData(initialHours); 
     refreshKatyWeatherChart(initialHours);
     refreshNestData(initialHours);
-    
+    fetchAquariumData(initialHours);
+
     // ======================= CALL THE NEW ANALYTICS FETCH =======================
     fetchSumpAnalyticsData();
 
@@ -1215,13 +1216,18 @@ if (sumpRunsPerDayChartInstance) {
         fetchSumpHistoricalData(currentSumpRangeHours);
         refreshKatyWeatherChart(currentSumpRangeHours);
         refreshNestData(currentSumpRangeHours);
+        fetchAquariumData(currentSumpRangeHours);
     }, SUMP_CHART_REFRESH_INTERVAL_MS);
 
     // Diagnostics panel: render immediately, then keep the relative "X ago"
     // fields (weather cache age, sump chart refresh age, CSV freshness)
     // ticking even when no new event has come in.
     renderDiagnostics();
-    setInterval(renderDiagnostics, 30 * 1000);
+    renderAquariumReadingAge();
+    setInterval(() => {
+        renderDiagnostics();
+        renderAquariumReadingAge();
+    }, 30 * 1000);
 
     // "Time Since Last Cycle" ticks continuously client-side rather than
     // only updating once per live sumpData event (see connectSumpMonitorSSE
@@ -1243,6 +1249,7 @@ document.getElementById('history-range').addEventListener('change', function() {
     fetchSumpHistoricalData(selectedHours);      // New function
     refreshKatyWeatherChart(selectedHours);
     refreshNestData(selectedHours);
+    fetchAquariumData(selectedHours);
 });
 
 function fetchTempMonitorHistoricalData(rangeHours = 1) {
@@ -1400,6 +1407,164 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
         .catch(err => {
             logDiagError("Temp Monitor history fetch", err);
         });
+}
+
+// ── Aquarium state ──
+// Stores the timestamp of the most recent non-offline reading from AIO,
+// so the "last reading" age ticks continuously even between dashboard refreshes.
+let aquariumLastReadingMs = null;
+
+// ── Aquarium Monitor: fetch historical data from Adafruit IO CSV ──
+// AIO CSV format: created_at, value, ... — newest row first, no header.
+// ?limit=500 covers ~41 hours at 5-min logging. Increase if you want more history.
+function fetchAquariumData(rangeHours = 4) {
+    if (typeof AQUARIUM_WATER_CSV_URL === 'undefined' ||
+        AQUARIUM_WATER_CSV_URL.includes('your_adafruit_username')) {
+        console.warn('Aquarium: AQUARIUM_WATER_CSV_URL not configured in config.js');
+        const statusEl = document.getElementById('aquarium-status');
+        if (statusEl) { statusEl.textContent = 'Config needed'; statusEl.style.color = 'orange'; }
+        return;
+    }
+
+    const cutoff = new Date(Date.now() - rangeHours * 60 * 60 * 1000);
+
+    Promise.all([
+        fetch(AQUARIUM_WATER_CSV_URL).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); }),
+        fetch(AQUARIUM_AMBIENT_CSV_URL).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
+    ])
+    .then(([waterCsv, ambientCsv]) => {
+        const water   = parseAioCsv(waterCsv,   cutoff);
+        const ambient = parseAioCsv(ambientCsv, cutoff);
+
+        // Update last-reading timestamp from the newest real (non-offline) row
+        const newestTs = Math.max(
+            water.latestTs   || 0,
+            ambient.latestTs || 0
+        );
+        if (newestTs > 0) aquariumLastReadingMs = newestTs;
+
+        updateAquariumCard(water, ambient);
+
+        const statusEl = document.getElementById('aquarium-status');
+        if (statusEl) { statusEl.textContent = 'Live'; statusEl.style.color = 'green'; }
+    })
+    .catch(err => {
+        console.error('Aquarium: fetch error:', err);
+        const statusEl = document.getElementById('aquarium-status');
+        if (statusEl) { statusEl.textContent = 'Error'; statusEl.style.color = 'red'; }
+    });
+}
+
+// Parse one AIO CSV feed.
+// Skips -999 sentinel rows for min/max/latest (shows them as offline).
+// Returns { latest, latestTs, min, max } for the selected time window.
+function parseAioCsv(csvText, cutoff) {
+    const OFFLINE = typeof AQUARIUM_OFFLINE_VALUE !== 'undefined' ? AQUARIUM_OFFLINE_VALUE : -999;
+    const lines = csvText.trim().split('\n');
+    let latest = null, latestTs = null, min = Infinity, max = -Infinity, count = 0;
+
+    for (const line of lines) {
+        const parts = line.split(',');
+        if (parts.length < 2) continue;
+        const ts  = new Date(parts[0].replace(/"/g, '').trim());
+        const val = parseFloat(parts[1]);
+        if (isNaN(ts.getTime()) || isNaN(val)) continue;
+        if (ts < cutoff) continue;
+
+        // Skip offline sentinel for all statistics
+        if (val <= OFFLINE + 1) continue;
+
+        if (latest === null) {
+            latest   = val;           // AIO returns newest-first
+            latestTs = ts.getTime();
+        }
+        if (val < min) min = val;
+        if (val > max) max = val;
+        count++;
+    }
+
+    return {
+        latest:   latest,
+        latestTs: latestTs,
+        min:      count > 0 ? min : null,
+        max:      count > 0 ? max : null
+    };
+}
+
+// Populate the aquarium card elements
+function updateAquariumCard(water, ambient) {
+    const waterLiveEl  = document.getElementById('aquarium-water-live');
+    const waterStatsEl = document.getElementById('aquarium-water-stats');
+    const ambLiveEl    = document.getElementById('aquarium-ambient-live');
+    const ambStatsEl   = document.getElementById('aquarium-ambient-stats');
+    const alarmRangeEl = document.getElementById('aquarium-alarm-range');
+
+    // Water current reading
+    if (waterLiveEl) {
+        if (water.latest !== null) {
+            waterLiveEl.textContent = water.latest.toFixed(1);
+            // Color red if outside alarm thresholds
+            if (typeof AQUARIUM_WATER_HIGH_F !== 'undefined') {
+                waterLiveEl.style.color =
+                    (water.latest >= AQUARIUM_WATER_HIGH_F || water.latest <= AQUARIUM_WATER_LOW_F)
+                    ? 'var(--text-danger, #e24b4a)' : '';
+            }
+        } else {
+            waterLiveEl.textContent  = 'Offline';
+            waterLiveEl.style.color  = 'var(--text-danger, #e24b4a)';
+        }
+    }
+
+    // Water H/L stats (offline sentinels already excluded by parseAioCsv)
+    if (waterStatsEl) {
+        const h = water.max !== null ? water.max.toFixed(0) + '°' : '--';
+        const l = water.min !== null ? water.min.toFixed(0) + '°' : '--';
+        waterStatsEl.innerHTML = `H: <span class="temp-high">${h}</span> / L: <span class="temp-low">${l}</span>`;
+    }
+
+    // Ambient current reading
+    if (ambLiveEl) {
+        if (ambient.latest !== null) {
+            ambLiveEl.textContent = ambient.latest.toFixed(1);
+            ambLiveEl.style.color = '';
+        } else {
+            ambLiveEl.textContent = 'Offline';
+            ambLiveEl.style.color = 'var(--text-danger, #e24b4a)';
+        }
+    }
+
+    // Ambient H/L stats
+    if (ambStatsEl) {
+        const h = ambient.max !== null ? ambient.max.toFixed(0) + '°' : '--';
+        const l = ambient.min !== null ? ambient.min.toFixed(0) + '°' : '--';
+        ambStatsEl.innerHTML = `H: <span class="temp-high">${h}</span> / L: <span class="temp-low">${l}</span>`;
+    }
+
+    // Alarm range label
+    if (alarmRangeEl && typeof AQUARIUM_WATER_LOW_F !== 'undefined') {
+        alarmRangeEl.textContent = `${AQUARIUM_WATER_LOW_F}–${AQUARIUM_WATER_HIGH_F}°F`;
+    }
+}
+
+// Render the "last reading" age — called by the shared diagnostics setInterval
+// so it ticks continuously without needing an AIO refetch.
+function renderAquariumReadingAge() {
+    const ageEl = document.getElementById('aquarium-reading-age');
+    if (!ageEl) return;
+    if (!aquariumLastReadingMs) { ageEl.textContent = '--'; return; }
+
+    const diffSec = Math.round((Date.now() - aquariumLastReadingMs) / 1000);
+    let ageStr;
+    if (diffSec < 5)        ageStr = 'just now';
+    else if (diffSec < 60)  ageStr = `${diffSec}s ago`;
+    else if (diffSec < 3600) ageStr = `${Math.round(diffSec / 60)}m ago`;
+    else                     ageStr = `${(diffSec / 3600).toFixed(1)}h ago`;
+
+    // Highlight red if reading is older than 2× the logging interval (stale board)
+    const staleThresholdMs = 2 * (typeof LOG_INTERVAL_MIN !== 'undefined' ? LOG_INTERVAL_MIN : 5) * 60 * 1000;
+    ageEl.textContent  = ageStr;
+    ageEl.style.color  = (Date.now() - aquariumLastReadingMs) > staleThresholdMs
+                         ? 'var(--text-danger, #e24b4a)' : '';
 }
 
 // --- Fetch Historical Data for Sump Pump ---
