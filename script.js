@@ -1414,8 +1414,10 @@ function fetchTempMonitorHistoricalData(rangeHours = 1) {
 // so the "last reading" age ticks continuously even between dashboard refreshes.
 let aquariumLastReadingMs = null;
 
-// ── Aquarium Monitor: fetch historical data from Adafruit IO CSV ──
-// AIO CSV format: created_at, value, ... — newest row first, no header.
+// ── Aquarium Monitor: fetch historical data from Adafruit IO JSON API ──
+// Uses /api/v2/.../data (not the /feeds/name/csv web-download URL) so the
+// response carries CORS headers and the browser can read it cross-origin.
+// Feeds must be set to Public in Adafruit IO (Feed Info → Visibility → Public).
 // ?limit=500 covers ~41 hours at 5-min logging. Increase if you want more history.
 function fetchAquariumData(rangeHours = 4) {
     if (typeof AQUARIUM_WATER_CSV_URL === 'undefined' ||
@@ -1429,12 +1431,12 @@ function fetchAquariumData(rangeHours = 4) {
     const cutoff = new Date(Date.now() - rangeHours * 60 * 60 * 1000);
 
     Promise.all([
-        fetch(AQUARIUM_WATER_CSV_URL).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); }),
-        fetch(AQUARIUM_AMBIENT_CSV_URL).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
+        fetch(AQUARIUM_WATER_CSV_URL).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+        fetch(AQUARIUM_AMBIENT_CSV_URL).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
     ])
-    .then(([waterCsv, ambientCsv]) => {
-        const water   = parseAioCsv(waterCsv,   cutoff);
-        const ambient = parseAioCsv(ambientCsv, cutoff);
+    .then(([waterData, ambientData]) => {
+        const water   = parseAioJson(waterData,   cutoff);
+        const ambient = parseAioJson(ambientData, cutoff);
 
         // Update last-reading timestamp from the newest real (non-offline) row
         const newestTs = Math.max(
@@ -1455,19 +1457,17 @@ function fetchAquariumData(rangeHours = 4) {
     });
 }
 
-// Parse one AIO CSV feed.
+// Parse one AIO JSON feed (array returned by /api/v2/.../data).
+// Each item has { value: "85.3", created_at: "2026-10-18T19:00:00Z", ... }.
 // Skips -999 sentinel rows for min/max/latest (shows them as offline).
 // Returns { latest, latestTs, min, max } for the selected time window.
-function parseAioCsv(csvText, cutoff) {
+function parseAioJson(dataArray, cutoff) {
     const OFFLINE = typeof AQUARIUM_OFFLINE_VALUE !== 'undefined' ? AQUARIUM_OFFLINE_VALUE : -999;
-    const lines = csvText.trim().split('\n');
     let latest = null, latestTs = null, min = Infinity, max = -Infinity, count = 0;
 
-    for (const line of lines) {
-        const parts = line.split(',');
-        if (parts.length < 2) continue;
-        const ts  = new Date(parts[0].replace(/"/g, '').trim());
-        const val = parseFloat(parts[1]);
+    for (const item of (dataArray || [])) {
+        const ts  = new Date(item.created_at);
+        const val = parseFloat(item.value);
         if (isNaN(ts.getTime()) || isNaN(val)) continue;
         if (ts < cutoff) continue;
 
@@ -1515,7 +1515,7 @@ function updateAquariumCard(water, ambient) {
         }
     }
 
-    // Water H/L stats (offline sentinels already excluded by parseAioCsv)
+    // Water H/L stats (offline sentinels already excluded by parseAioJson)
     if (waterStatsEl) {
         const h = water.max !== null ? water.max.toFixed(0) + '°' : '--';
         const l = water.min !== null ? water.min.toFixed(0) + '°' : '--';
