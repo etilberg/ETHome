@@ -1518,7 +1518,7 @@ function fetchAquariumData(rangeHours = 4) {
         if (newestTs > 0) aquariumLastReadingMs = newestTs;
 
         updateAquariumCard(water, ambient);
-        updateAquariumChart(water.points, ambient.points);
+        updateAquariumChart(water.points, ambient.points, rangeHours);
 
         const statusEl = document.getElementById('aquarium-status');
         if (statusEl) { statusEl.textContent = 'Live'; statusEl.style.color = 'green'; }
@@ -1625,12 +1625,15 @@ function updateAquariumCard(water, ambient) {
     }
 }
 
-// Push new time-series data into the aquarium chart.
-// waterPoints / ambientPoints: [{x: Date, y: number}, ...] sorted oldest-first.
-function updateAquariumChart(waterPoints, ambientPoints) {
+// Push new time-series data into the aquarium chart and pin the X-axis to the
+// selected history window so Chart.js doesn't pad to midnight boundaries.
+function updateAquariumChart(waterPoints, ambientPoints, rangeHours) {
     if (!aquariumChartInstance) return;
     aquariumChartInstance.data.datasets[0].data = waterPoints;
     aquariumChartInstance.data.datasets[1].data = ambientPoints;
+    const now = Date.now();
+    aquariumChartInstance.options.scales.x.max = now;
+    aquariumChartInstance.options.scales.x.min = now - rangeHours * 3600000;
     aquariumChartInstance.update();
 }
 
