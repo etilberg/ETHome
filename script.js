@@ -94,6 +94,7 @@ let sumpRunsPerDayChartInstance;
 let katyWeatherChartInstance;
 let katyWindChartInstance;
 let nestChartInstance;
+let aquariumChartInstance;
 
 // A single, unified cache for all weather station data
 let masterWeatherCache = {
@@ -1188,6 +1189,71 @@ if (sumpRunsPerDayChartInstance) {
         });
     }
 
+    // Aquarium chart — dual independent Y-axes (water left, ambient right)
+    const aquariumCtx = document.getElementById('aquariumChart');
+    if (aquariumCtx) {
+        aquariumChartInstance = new Chart(aquariumCtx.getContext('2d'), {
+            type: 'line',
+            data: {
+                datasets: [
+                    {
+                        label: 'Water Temp (°F)',
+                        data: [],
+                        parsing: false,
+                        borderColor: 'rgb(54, 162, 235)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0.1,
+                        yAxisID: 'y_water'
+                    },
+                    {
+                        label: 'Ambient Temp (°F)',
+                        data: [],
+                        parsing: false,
+                        borderColor: 'rgb(255, 159, 64)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0.1,
+                        yAxisID: 'y_ambient'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'nearest', axis: 'x', intersect: false },
+                scales: {
+                    x: { type: 'time' },
+                    y_water: {
+                        type: 'linear',
+                        position: 'left',
+                        beginAtZero: false,
+                        title: { display: true, text: 'Water (°F)', color: 'rgb(54, 162, 235)' },
+                        ticks: { color: 'rgb(54, 162, 235)' }
+                    },
+                    y_ambient: {
+                        type: 'linear',
+                        position: 'right',
+                        beginAtZero: false,
+                        title: { display: true, text: 'Ambient (°F)', color: 'rgb(255, 159, 64)' },
+                        ticks: { color: 'rgb(255, 159, 64)' },
+                        grid: { drawOnChartArea: false }
+                    }
+                },
+                plugins: {
+                    legend: { display: true },
+                    zoom: {
+                        pan: { enabled: false, mode: 'x' },
+                        zoom: { wheel: { enabled: false }, pinch: { enabled: false }, mode: 'x' }
+                    }
+                }
+            }
+        });
+        aquariumCtx.addEventListener('dblclick', () => aquariumChartInstance.resetZoom());
+    }
+
     // Start SSE connections
     connectTempMonitorSSE();
     connectSumpMonitorSSE();
@@ -1430,9 +1496,15 @@ function fetchAquariumData(rangeHours = 4) {
 
     const cutoff = new Date(Date.now() - rangeHours * 60 * 60 * 1000);
 
+    // Compute limit to cover the full selected range at 5-min logging intervals,
+    // plus a 15% buffer. Minimum 500 so short ranges still load quickly.
+    const limit       = Math.max(500, Math.ceil(rangeHours * 12 * 1.15));
+    const baseWater   = AQUARIUM_WATER_CSV_URL.split('?')[0];
+    const baseAmbient = AQUARIUM_AMBIENT_CSV_URL.split('?')[0];
+
     Promise.all([
-        fetch(AQUARIUM_WATER_CSV_URL).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
-        fetch(AQUARIUM_AMBIENT_CSV_URL).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+        fetch(`${baseWater}?limit=${limit}`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+        fetch(`${baseAmbient}?limit=${limit}`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
     ])
     .then(([waterData, ambientData]) => {
         const water   = parseAioJson(waterData,   cutoff);
@@ -1446,6 +1518,7 @@ function fetchAquariumData(rangeHours = 4) {
         if (newestTs > 0) aquariumLastReadingMs = newestTs;
 
         updateAquariumCard(water, ambient);
+        updateAquariumChart(water.points, ambient.points);
 
         const statusEl = document.getElementById('aquarium-status');
         if (statusEl) { statusEl.textContent = 'Live'; statusEl.style.color = 'green'; }
@@ -1464,6 +1537,7 @@ function fetchAquariumData(rangeHours = 4) {
 function parseAioJson(dataArray, cutoff) {
     const OFFLINE = typeof AQUARIUM_OFFLINE_VALUE !== 'undefined' ? AQUARIUM_OFFLINE_VALUE : -999;
     let latest = null, latestTs = null, min = Infinity, max = -Infinity, count = 0;
+    const points = []; // {x: Date, y: number} for Chart.js (parsing: false)
 
     for (const item of (dataArray || [])) {
         const ts  = new Date(item.created_at);
@@ -1480,14 +1554,19 @@ function parseAioJson(dataArray, cutoff) {
         }
         if (val < min) min = val;
         if (val > max) max = val;
+        points.push({ x: ts, y: val });
         count++;
     }
+
+    // AIO returns newest-first; reverse so chart plots oldest→newest left→right
+    points.reverse();
 
     return {
         latest:   latest,
         latestTs: latestTs,
         min:      count > 0 ? min : null,
-        max:      count > 0 ? max : null
+        max:      count > 0 ? max : null,
+        points
     };
 }
 
@@ -1544,6 +1623,15 @@ function updateAquariumCard(water, ambient) {
     if (alarmRangeEl && typeof AQUARIUM_WATER_LOW_F !== 'undefined') {
         alarmRangeEl.textContent = `${AQUARIUM_WATER_LOW_F}–${AQUARIUM_WATER_HIGH_F}°F`;
     }
+}
+
+// Push new time-series data into the aquarium chart.
+// waterPoints / ambientPoints: [{x: Date, y: number}, ...] sorted oldest-first.
+function updateAquariumChart(waterPoints, ambientPoints) {
+    if (!aquariumChartInstance) return;
+    aquariumChartInstance.data.datasets[0].data = waterPoints;
+    aquariumChartInstance.data.datasets[1].data = ambientPoints;
+    aquariumChartInstance.update();
 }
 
 // Render the "last reading" age — called by the shared diagnostics setInterval
