@@ -1621,7 +1621,7 @@ function updateAquariumCard(water, ambient) {
 
     // Alarm range label
     if (alarmRangeEl && typeof AQUARIUM_WATER_LOW_F !== 'undefined') {
-        alarmRangeEl.textContent = `${AQUARIUM_WATER_LOW_F}–${AQUARIUM_WATER_HIGH_F}°F`;
+        alarmRangeEl.textContent = `${Number(AQUARIUM_WATER_LOW_F).toFixed(1)}–${Number(AQUARIUM_WATER_HIGH_F).toFixed(1)}°F`;
     }
 }
 
