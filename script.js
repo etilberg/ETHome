@@ -1596,8 +1596,8 @@ function updateAquariumCard(water, ambient) {
 
     // Water H/L stats (offline sentinels already excluded by parseAioJson)
     if (waterStatsEl) {
-        const h = water.max !== null ? water.max.toFixed(0) + '°' : '--';
-        const l = water.min !== null ? water.min.toFixed(0) + '°' : '--';
+        const h = water.max !== null ? water.max.toFixed(1) + '°' : '--';
+        const l = water.min !== null ? water.min.toFixed(1) + '°' : '--';
         waterStatsEl.innerHTML = `H: <span class="temp-high">${h}</span> / L: <span class="temp-low">${l}</span>`;
     }
 
