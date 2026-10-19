@@ -1576,8 +1576,6 @@ function updateAquariumCard(water, ambient) {
     const waterStatsEl = document.getElementById('aquarium-water-stats');
     const ambLiveEl    = document.getElementById('aquarium-ambient-live');
     const ambStatsEl   = document.getElementById('aquarium-ambient-stats');
-    const alarmRangeEl = document.getElementById('aquarium-alarm-range');
-
     // Water current reading
     if (waterLiveEl) {
         if (water.latest !== null) {
@@ -1619,10 +1617,6 @@ function updateAquariumCard(water, ambient) {
         ambStatsEl.innerHTML = `H: <span class="temp-high">${h}</span> / L: <span class="temp-low">${l}</span>`;
     }
 
-    // Alarm range label
-    if (alarmRangeEl && typeof AQUARIUM_WATER_LOW_F !== 'undefined') {
-        alarmRangeEl.textContent = `${Number(AQUARIUM_WATER_LOW_F).toFixed(1)}–${Number(AQUARIUM_WATER_HIGH_F).toFixed(1)}°F`;
-    }
 }
 
 // Push new time-series data into the aquarium chart and pin the X-axis to the
