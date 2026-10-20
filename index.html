@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ET Home Dashboard</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=2">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/moment@^2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@^1"></script>
@@ -15,6 +15,24 @@
 
 </head>
 <body>
+    <div id="sticky-bar">
+        <div id="sticky-outdoor-temp">
+            <span id="sticky-temp-value">--°F</span>
+            <span id="sticky-temp-label">Outdoor</span>
+        </div>
+        <div id="sticky-range-control">
+            <label for="history-range">History:</label>
+            <select id="history-range">
+              <option value="1">1 hr</option>
+              <option value="2">2 hr</option>
+              <option value="4" selected>4 hr</option>
+              <option value="12">12 hr</option>
+              <option value="24">24 hr</option>
+              <option value="48">48 hr</option>
+              <option value="168">1 wk</option>
+            </select>
+        </div>
+    </div>
     <div id="weather-display-container">
     <div id="current-weather">
         <img id="current-icon" class="weather-icon" src="" alt="" />
@@ -87,21 +105,7 @@
                 <div class="temp-card-stats">Auto: <span id="live-heater-auto-status">--</span></div>
             </div>
           </div>
-          <div class="history-container">
           <h3>Fridge/Freezer History</h3>
-          <div>
-            <label for="history-range">Select History Range:</label>
-            <select id="history-range">
-              <option value="1">Last 1 Hour</option>
-              <option value="2">Last 2 Hours</option>
-              <option value="4" selected>Last 4 Hours</option>
-              <option value="12">Last 12 Hours</option>
-              <option value="24">Last 24 Hours</option>
-              <option value="48">Last 48 Hours</option>
-              <option value="168">Last 1 Week</option>
-            </select>
-          </div>
-        </div>
         <div class="chart-container">
             <canvas id="fridgeChart"></canvas>
         </div>
@@ -274,6 +278,6 @@
 
     <!-- PUT NOTHING AFTER THESE LINES -->
     <script src="config.js?v=3"></script>
-    <script src="script.js?v=6"></script>
+    <script src="script.js?v=7"></script>
 </body>
 </html>
