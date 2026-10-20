@@ -1572,6 +1572,31 @@ function parseAioJson(dataArray, cutoff) {
     };
 }
 
+// Compute rate of change for a sorted (oldest→newest) points array.
+// Looks back up to windowMin minutes from the newest point; finds the
+// oldest point within that window, computes delta and direction.
+// Returns { delta, direction: 'rising'|'falling' } or null if not enough data.
+function computeRateOfChange(points, windowMin) {
+    if (!points || points.length < 2) return null;
+    const newest = points[points.length - 1];
+    const windowMs = windowMin * 60 * 1000;
+    const cutoff = new Date(newest.x.getTime() - windowMs);
+
+    // Walk backward from second-to-last to find oldest point inside the window
+    let oldest = null;
+    for (let i = points.length - 2; i >= 0; i--) {
+        if (points[i].x >= cutoff) {
+            oldest = points[i];
+        } else {
+            break;
+        }
+    }
+    if (!oldest) return null;
+
+    const delta = newest.y - oldest.y;
+    return { delta, direction: delta >= 0 ? 'rising' : 'falling' };
+}
+
 // Populate the aquarium card elements
 function updateAquariumCard(water, ambient) {
     const waterLiveEl  = document.getElementById('aquarium-water-live');
@@ -1599,6 +1624,23 @@ function updateAquariumCard(water, ambient) {
         const h = water.max !== null ? water.max.toFixed(1) + '°' : '--';
         const l = water.min !== null ? water.min.toFixed(1) + '°' : '--';
         waterStatsEl.innerHTML = `H: <span class="temp-high">${h}</span> / L: <span class="temp-low">${l}</span>`;
+    }
+
+    // Rate-of-change indicator
+    const rocEl = document.getElementById('aquarium-roc');
+    if (rocEl) {
+        const windowMin   = typeof AQUARIUM_ROC_WINDOW_MIN  !== 'undefined' ? AQUARIUM_ROC_WINDOW_MIN  : 30;
+        const thresholdF  = typeof AQUARIUM_ROC_THRESHOLD_F !== 'undefined' ? AQUARIUM_ROC_THRESHOLD_F : 1.0;
+        const roc = computeRateOfChange(water.points, windowMin);
+        if (roc && Math.abs(roc.delta) >= thresholdF) {
+            const arrow = roc.direction === 'rising' ? '↑' : '↓';
+            const sign  = roc.delta >= 0 ? '+' : '';
+            rocEl.textContent = `${arrow} ${sign}${roc.delta.toFixed(1)}°F / ${windowMin} min`;
+            rocEl.style.color   = roc.direction === 'rising' ? '#f0a500' : '#5bc8f5';
+            rocEl.style.display = 'block';
+        } else {
+            rocEl.style.display = 'none';
+        }
     }
 
     // Ambient current reading

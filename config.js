@@ -57,6 +57,11 @@ const AQUARIUM_WATER_LOW_F   = 80.0;
 // Sentinel value the firmware posts when a sensor is offline
 const AQUARIUM_OFFLINE_VALUE = -999;
 
+// Rate-of-change alert — shows a warning on the card when water temp changes
+// more than AQUARIUM_ROC_THRESHOLD_F degrees within AQUARIUM_ROC_WINDOW_MIN minutes.
+const AQUARIUM_ROC_WINDOW_MIN    = 30;   // look-back window in minutes
+const AQUARIUM_ROC_THRESHOLD_F   = 1.0;  // minimum change (°F) to show the indicator
+
 // Logging interval (minutes) — used by the staleness indicator
 const LOG_INTERVAL_MIN = 5;
 
