@@ -46,6 +46,10 @@ const SUMP_HISTORY_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ
 // the API endpoint returns Access-Control-Allow-Origin: * headers, which the
 // web-download URL does not — without CORS headers the browser blocks the fetch.
 // Requires the feeds to be set to Public in Adafruit IO (Feed Info → Visibility).
+// Particle device ID for the aquarium Photon — used by the /reset-aquarium Worker route.
+// Find it at particle.io → Devices → click the device → Device ID.
+const AQUARIUM_DEVICE_ID = 'REPLACE_WITH_AQUARIUM_PHOTON_ID';
+
 const AQUARIUM_WATER_CSV_URL   = 'https://io.adafruit.com/api/v2/etilberg/feeds/aquarium-water-temp/data';
 const AQUARIUM_AMBIENT_CSV_URL = 'https://io.adafruit.com/api/v2/etilberg/feeds/aquarium-ambient-temp/data';
 

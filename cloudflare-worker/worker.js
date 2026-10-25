@@ -21,8 +21,9 @@
 // (it has to be, the browser calls it directly), so this is about reducing
 // blast radius, not achieving a login-gated dashboard.
 
-const SUMP_DEVICE_ID = "3b0055000851353531343431";
-const TEMP_DEVICE_ID = "240039000e47353136383631";
+const SUMP_DEVICE_ID     = "3b0055000851353531343431";
+const TEMP_DEVICE_ID     = "240039000e47353136383631";
+const AQUARIUM_DEVICE_ID = "REPLACE_WITH_AQUARIUM_PHOTON_ID"; // particle.io → Devices
 
 // -- Nest thermostat (indoor temp/humidity/HVAC status) --
 // Non-secret identifiers -- safe to hardcode here just like the Particle
@@ -114,6 +115,18 @@ export default {
                     return jsonResponse(JSON.stringify({ error: "Invalid or missing PIN" }), 403, corsHeaders);
                 }
                 const resp = await fetch(`https://api.particle.io/v1/devices/${TEMP_DEVICE_ID}/reset`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body: `access_token=${env.PARTICLE_TOKEN}&args=reset`,
+                });
+                return jsonResponse(await resp.text(), resp.status, corsHeaders);
+            }
+
+            if (url.pathname === "/reset-aquarium" && request.method === "POST") {
+                if (!checkActionPin(request, env)) {
+                    return jsonResponse(JSON.stringify({ error: "Invalid or missing PIN" }), 403, corsHeaders);
+                }
+                const resp = await fetch(`https://api.particle.io/v1/devices/${AQUARIUM_DEVICE_ID}/reset`, {
                     method: "POST",
                     headers: { "Content-Type": "application/x-www-form-urlencoded" },
                     body: `access_token=${env.PARTICLE_TOKEN}&args=reset`,

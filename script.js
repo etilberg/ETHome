@@ -2527,3 +2527,57 @@ if (resetButton) {
   });
 }
 // ===== END DEVICE RESET FUNCTIONALITY =====
+
+// ===== AQUARIUM SENSOR RESET =====
+const aquariumResetButton = document.getElementById("aquarium-reset-button");
+const aquariumResetStatus = document.getElementById("aquarium-reset-status");
+
+if (aquariumResetButton) {
+  aquariumResetButton.addEventListener("click", async function () {
+    if (!confirm("Reset the aquarium Photon?\n\nThe sensor will restart in ~10–15 seconds and resume normal logging.")) {
+      return;
+    }
+
+    const pin = promptForActionPin();
+    if (pin === null) return;
+
+    aquariumResetButton.disabled = true;
+    aquariumResetButton.textContent = "↺ Resetting…";
+    aquariumResetStatus.textContent = "Sending reset…";
+    aquariumResetStatus.style.color = "orange";
+
+    try {
+      const resp = await fetch(`${PARTICLE_PROXY_BASE_URL}/reset-aquarium`, {
+        method: "POST",
+        headers: { "X-Action-Pin": pin },
+      });
+
+      if (resp.status === 403) {
+        aquariumResetStatus.textContent = "❌ Wrong PIN";
+        aquariumResetStatus.style.color = "red";
+        aquariumResetButton.disabled = false;
+        aquariumResetButton.textContent = "↺ Reset Sensor";
+        return;
+      }
+
+      const data = await resp.json();
+      if (resp.ok || data.error === "Timed out.") {
+        aquariumResetStatus.textContent = "✅ Restarting…";
+        aquariumResetStatus.style.color = "green";
+        setTimeout(() => {
+          aquariumResetButton.disabled = false;
+          aquariumResetButton.textContent = "↺ Reset Sensor";
+          aquariumResetStatus.textContent = "";
+        }, 30000);
+      } else {
+        throw new Error(data.error || `HTTP ${resp.status}`);
+      }
+    } catch (err) {
+      aquariumResetStatus.textContent = "❌ " + err.message;
+      aquariumResetStatus.style.color = "red";
+      aquariumResetButton.disabled = false;
+      aquariumResetButton.textContent = "↺ Reset Sensor";
+    }
+  });
+}
+// ===== END AQUARIUM SENSOR RESET =====
