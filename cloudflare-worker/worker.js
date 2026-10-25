@@ -23,7 +23,7 @@
 
 const SUMP_DEVICE_ID     = "3b0055000851353531343431";
 const TEMP_DEVICE_ID     = "240039000e47353136383631";
-const AQUARIUM_DEVICE_ID = "REPLACE_WITH_AQUARIUM_PHOTON_ID"; // particle.io → Devices
+const AQUARIUM_DEVICE_ID = "230043001347353136383631"; // particle.io → Devices
 
 // -- Nest thermostat (indoor temp/humidity/HVAC status) --
 // Non-secret identifiers -- safe to hardcode here just like the Particle
