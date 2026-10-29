@@ -28,6 +28,8 @@ const diagTempConnElement = document.getElementById('diag-temp-conn');
 const diagTempCsvAgeElement = document.getElementById('diag-temp-csv-age');
 const diagWeatherAgeElement = document.getElementById('diag-weather-age');
 const diagSumpChartRefreshElement = document.getElementById('diag-sump-chart-refresh');
+const diagAquariumConnElement = document.getElementById('diag-aquarium-conn');
+const diagAquariumDataAgeElement = document.getElementById('diag-aquarium-data-age');
 const diagLastErrorElement = document.getElementById('diag-last-error');
 
 // KATY Weather Detail (Temp/Humidity/Wind/Pressure) Elements
@@ -132,6 +134,8 @@ const diagState = {
     tempCsvLatest: null,       // timestamp (ms) of the newest row in the last temp CSV fetch
     weatherCacheTimestamp: 0,  // when masterWeatherCache was last populated
     sumpChartLastRefresh: null,
+    aquariumConn: 'Initializing...',
+    aquariumLastFetch: null,   // timestamp (ms) of the last successful AIO fetch
     lastError: null,
 };
 
@@ -241,6 +245,8 @@ function renderDiagnostics() {
     if (diagTempCsvAgeElement) diagTempCsvAgeElement.textContent = formatAgo(diagState.tempCsvLatest);
     if (diagWeatherAgeElement) diagWeatherAgeElement.textContent = formatAgo(diagState.weatherCacheTimestamp);
     if (diagSumpChartRefreshElement) diagSumpChartRefreshElement.textContent = formatAgo(diagState.sumpChartLastRefresh);
+    if (diagAquariumConnElement) diagAquariumConnElement.textContent = diagState.aquariumConn;
+    if (diagAquariumDataAgeElement) diagAquariumDataAgeElement.textContent = formatAgo(diagState.aquariumLastFetch);
     if (diagLastErrorElement) diagLastErrorElement.textContent = diagState.lastError ?? 'None';
 }
 
@@ -1522,11 +1528,16 @@ function fetchAquariumData(rangeHours = 4) {
         updateAquariumCard(water, ambient);
         updateAquariumChart(water.points, ambient.points, rangeHours);
 
+        diagState.aquariumConn = 'Connected';
+        diagState.aquariumLastFetch = Date.now();
+
         const statusEl = document.getElementById('aquarium-status');
         if (statusEl) { statusEl.textContent = 'Live'; statusEl.style.color = 'green'; }
     })
     .catch(err => {
         console.error('Aquarium: fetch error:', err);
+        diagState.aquariumConn = `Error: ${err.message}`;
+        logDiagError('aquarium fetch', err);
         const statusEl = document.getElementById('aquarium-status');
         if (statusEl) { statusEl.textContent = 'Error'; statusEl.style.color = 'red'; }
     });
