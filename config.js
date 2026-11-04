@@ -55,8 +55,8 @@ const AQUARIUM_AMBIENT_CSV_URL = 'https://io.adafruit.com/api/v2/etilberg/feeds/
 
 // Alarm display thresholds — for coloring the live reading on the card
 // (actual push alerts come from the BL602 firmware)
-const AQUARIUM_WATER_HIGH_F  = 89.0;
-const AQUARIUM_WATER_LOW_F   = 80.0;
+const AQUARIUM_WATER_HIGH_F  = 81.0;
+const AQUARIUM_WATER_LOW_F   = 77.0;
 
 // Sentinel value the firmware posts when a sensor is offline
 const AQUARIUM_OFFLINE_VALUE = -999;
@@ -82,12 +82,12 @@ if (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined') { // Cleanup if old variable 
 // Edit the numbers here to tune; no other code changes are needed.
 const CARD_LIMITS = {
   fridge:         { low: 34,  high: 41  },  // deg F
-  freezer:        { low: -20, high: 10  },  // deg F
-  garage:         { low: 35,  high: 95  },  // deg F
-  sumpTemp:       { low: 45,  high: 80  },  // deg F, basement
-  sumpPower:      { low: null, high: null }, // volts; set once the normal supply voltage is known
+  freezer:        { low: -15, high: 0  },  // deg F
+  garage:         { low: 32,  high: 100 },  // deg F
+  sumpTemp:       { low: 60,  high: 75  },  // deg F, basement
+  sumpPower:      { low: 5,    high: 7   },  // volts
   nestTemp:       { low: 62,  high: 78  },  // deg F, indoor
   nestHumidity:   { low: 25,  high: 60  },  // % RH
   aquariumWater:  { low: 77,  high: 81  },  // deg F
-  aquariumAmbient:{ low: 55,  high: 85  }   // deg F
+  aquariumAmbient:{ low: 62,  high: 78  }   // deg F
 };
