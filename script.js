@@ -1635,12 +1635,7 @@ function updateAquariumCard(water, ambient) {
         if (water.latest !== null) {
             waterLiveEl.textContent = water.latest.toFixed(1);
             applyCardLimit(waterLiveEl, water.latest, 'aquariumWater');
-            // Color red if outside alarm thresholds
-            if (typeof AQUARIUM_WATER_HIGH_F !== 'undefined') {
-                waterLiveEl.style.color =
-                    (water.latest >= AQUARIUM_WATER_HIGH_F || water.latest <= AQUARIUM_WATER_LOW_F)
-                    ? 'var(--text-danger, #e24b4a)' : '';
-            }
+            waterLiveEl.style.color = '';
         } else {
             waterLiveEl.textContent  = 'Offline';
             applyCardLimit(waterLiveEl, null, 'aquariumWater');
