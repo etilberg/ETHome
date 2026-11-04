@@ -395,3 +395,10 @@ small {
 .hvac-idle {
     color: #b0bec5;
 }
+
+/* Global status dot in the sticky bar */
+#global-status { display: flex; align-items: center; padding: 6px; cursor: help; }
+#global-status-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; background: #777; }
+#global-status-dot.status-ok { background: #2ecc71; box-shadow: 0 0 6px #2ecc71; }
+#global-status-dot.status-bad { background: #e74c3c; box-shadow: 0 0 6px #e74c3c; }
+#global-status-dot.status-checking { background: #777; }

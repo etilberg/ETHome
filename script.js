@@ -137,6 +137,7 @@ const diagState = {
     aquariumConn: 'Initializing...',
     aquariumLastFetch: null,   // timestamp (ms) of the last successful AIO fetch
     lastError: null,
+    tempLastEventMs: null,     // when the last live fridge/freezer/garage event arrived
 };
 
 function formatAgo(timestampMs) {
@@ -1929,6 +1930,7 @@ function connectTempMonitorSSE() {
             }
             // --- End New Heater Display ---
 
+            diagState.tempLastEventMs = Date.now();
             tempMonitorLastUpdatedElement.textContent = timestamp.toLocaleTimeString();
             tempMonitorStatusElement.textContent = "Receiving data";
             tempMonitorStatusElement.style.color = 'green';
@@ -2613,3 +2615,56 @@ if (aquariumResetButton) {
   });
 }
 // ===== END AQUARIUM SENSOR RESET =====
+
+
+// ================================
+// Global status dot
+// ================================
+const statusPageLoadMs = Date.now();
+
+function collectStatusProblems() {
+    const problems = [];
+    const now = Date.now();
+
+    // 1. Any card outside its limits
+    document.querySelectorAll('.temp-card.limit-low, .temp-card.limit-high').forEach(card => {
+        const label = card.querySelector('.temp-card-label');
+        const low = card.classList.contains('limit-low');
+        problems.push(`${label ? label.textContent.trim() : 'Value'} ${low ? 'too low' : 'too high'}`);
+    });
+
+    // 2. Live connections
+    const badConn = (v) => /error|closed|config/i.test(v || '');
+    if (badConn(diagState.tempConn)) problems.push(`Fridge monitor connection: ${diagState.tempConn}`);
+    if (badConn(diagState.sumpConn)) problems.push(`Sump monitor connection: ${diagState.sumpConn}`);
+    if (badConn(diagState.aquariumConn)) problems.push(`Aquarium connection: ${diagState.aquariumConn}`);
+    if (nestStatusElement && /error/i.test(nestStatusElement.textContent)) problems.push('Nest data error');
+    if (tempMonitorStatusElement && /data error/i.test(tempMonitorStatusElement.textContent)) problems.push('Fridge monitor data error');
+    if (sumpMonitorStatusElement && /data error/i.test(sumpMonitorStatusElement.textContent)) problems.push('Sump monitor data error');
+
+    // 3. Stale data
+    const tempRef = diagState.tempLastEventMs || statusPageLoadMs;
+    if (now - tempRef > STATUS_TEMP_MONITOR_STALE_MIN * 60000) {
+        problems.push(`Fridge monitor silent for ${Math.round((now - tempRef) / 60000)} min`);
+    }
+    if (aquariumLastReadingMs && now - aquariumLastReadingMs > STATUS_AQUARIUM_STALE_MIN * 60000) {
+        problems.push(`Aquarium data stale (${Math.round((now - aquariumLastReadingMs) / 60000)} min)`);
+    }
+    return problems;
+}
+
+function updateGlobalStatus() {
+    const dot = document.getElementById('global-status-dot');
+    const wrap = document.getElementById('global-status');
+    if (!dot || !wrap) return;
+    if (Date.now() - statusPageLoadMs < STATUS_STARTUP_GRACE_SEC * 1000) {
+        dot.className = 'status-checking';
+        wrap.title = 'Checking...';
+        return;
+    }
+    const problems = collectStatusProblems();
+    dot.className = problems.length ? 'status-bad' : 'status-ok';
+    wrap.title = problems.length ? problems.join('\n') : 'All systems normal';
+}
+setInterval(updateGlobalStatus, 5000);
+updateGlobalStatus();

@@ -91,3 +91,10 @@ const CARD_LIMITS = {
   aquariumWater:  { low: 77,  high: 81  },  // deg F
   aquariumAmbient:{ low: 62,  high: 78  }   // deg F
 };
+
+// -- Global status dot (top bar) ---------------------------------------------
+// Dot goes red if any card is out of its limits, a connection is lost/errored,
+// or a data source has gone quiet for longer than these thresholds (minutes).
+const STATUS_TEMP_MONITOR_STALE_MIN = 15;   // fridge/freezer/garage live feed
+const STATUS_AQUARIUM_STALE_MIN     = 2 * LOG_INTERVAL_MIN;
+const STATUS_STARTUP_GRACE_SEC      = 30;   // stay grey while connections come up
