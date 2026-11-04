@@ -615,14 +615,30 @@ async function refreshNestData(rangeHours) {
     }
 }
 
+
+// Apply blue (low) / red (high) background to the .temp-card holding `el`, per CARD_LIMITS[key].
+function applyCardLimit(el, value, key) {
+    if (!el) return;
+    const card = el.closest('.temp-card');
+    if (!card) return;
+    card.classList.remove('limit-low', 'limit-high');
+    const lim = (typeof CARD_LIMITS !== 'undefined') ? CARD_LIMITS[key] : null;
+    const v = Number(value);
+    if (!lim || value === null || value === undefined || !Number.isFinite(v)) return;
+    if (lim.low !== null && lim.low !== undefined && v < lim.low) card.classList.add('limit-low');
+    else if (lim.high !== null && lim.high !== undefined && v > lim.high) card.classList.add('limit-high');
+}
+
 function updateNestLiveCards(latest) {
     if (!latest) return;
 
     if (nestTempElement) {
         nestTempElement.textContent = (latest.indoorTemp !== null && latest.indoorTemp !== undefined) ? latest.indoorTemp.toFixed(1) : '--';
+        applyCardLimit(nestTempElement, latest.indoorTemp, 'nestTemp');
     }
     if (nestHumidityElement) {
         nestHumidityElement.textContent = (latest.humidity !== null && latest.humidity !== undefined) ? Math.round(latest.humidity) : '--';
+        applyCardLimit(nestHumidityElement, latest.humidity, 'nestHumidity');
     }
     if (nestHvacStatusElement) {
         const status = latest.hvacStatus;
@@ -1618,6 +1634,7 @@ function updateAquariumCard(water, ambient) {
     if (waterLiveEl) {
         if (water.latest !== null) {
             waterLiveEl.textContent = water.latest.toFixed(1);
+            applyCardLimit(waterLiveEl, water.latest, 'aquariumWater');
             // Color red if outside alarm thresholds
             if (typeof AQUARIUM_WATER_HIGH_F !== 'undefined') {
                 waterLiveEl.style.color =
@@ -1626,6 +1643,7 @@ function updateAquariumCard(water, ambient) {
             }
         } else {
             waterLiveEl.textContent  = 'Offline';
+            applyCardLimit(waterLiveEl, null, 'aquariumWater');
             waterLiveEl.style.color  = 'var(--text-danger, #e24b4a)';
         }
     }
@@ -1658,6 +1676,7 @@ function updateAquariumCard(water, ambient) {
     if (ambLiveEl) {
         if (ambient.latest !== null) {
             ambLiveEl.textContent = ambient.latest.toFixed(1);
+            applyCardLimit(ambLiveEl, ambient.latest, 'aquariumAmbient');
             ambLiveEl.style.color = '';
         } else {
             ambLiveEl.textContent = 'Offline';
@@ -1845,6 +1864,13 @@ function fetchSumpHistoricalData(rangeHours) {
                 });
                 const binnedPrecipData = sortedKeys.map(key => bins.get(key).precip);
 
+                const precipTotalEl = document.getElementById('sump-precip-total');
+                if (precipTotalEl) {
+                    const totalPrecip = binnedPrecipData.reduce((sum, p) => sum + (Number(p) || 0), 0);
+                    const rangeLabel = rangeHours >= 168 ? 'past week' : `past ${rangeHours} hours`;
+                    precipTotalEl.textContent = `Total precipitation (${rangeLabel}): ${totalPrecip.toFixed(2)} in`;
+                }
+
                 // 4. Update the chart with the correctly aggregated data
                 if (sumpSinceRunChartInstance) {
                     sumpSinceRunChartInstance.data.labels = binnedLabels;
@@ -1895,9 +1921,9 @@ function connectTempMonitorSSE() {
             console.log("DEBUG: Temp Monitor data received:", jsonData); // Log the received data
 
             // --- Update Live Text Display ---
-            if (jsonData.fridge !== undefined) liveFridgeElement.textContent = jsonData.fridge.toFixed(1);
-            if (jsonData.freezer !== undefined) liveFreezerElement.textContent = jsonData.freezer.toFixed(1);
-            if (jsonData.garage !== undefined) liveGarageElement.textContent = jsonData.garage.toFixed(1);
+            if (jsonData.fridge !== undefined) { liveFridgeElement.textContent = jsonData.fridge.toFixed(1); applyCardLimit(liveFridgeElement, jsonData.fridge, 'fridge'); }
+            if (jsonData.freezer !== undefined) { liveFreezerElement.textContent = jsonData.freezer.toFixed(1); applyCardLimit(liveFreezerElement, jsonData.freezer, 'freezer'); }
+            if (jsonData.garage !== undefined) { liveGarageElement.textContent = jsonData.garage.toFixed(1); applyCardLimit(liveGarageElement, jsonData.garage, 'garage'); }
             
             // --- Update New Heater Display Elements ---
            /* if (jsonData.heater !== undefined && liveHeaterValueElement) {
@@ -1994,8 +2020,8 @@ function connectSumpMonitorSSE() {
             console.log("DEBUG: Parsed sump data:", jsonData);
 
             // --- Update Live Text Display (Sump) ---
-            if (jsonData.temp !== undefined) sumpTempElement.textContent = jsonData.temp.toFixed(1);
-            if (jsonData.extPower !== undefined) sumpPowerElement.textContent = jsonData.extPower.toFixed(2);
+            if (jsonData.temp !== undefined) { sumpTempElement.textContent = jsonData.temp.toFixed(1); applyCardLimit(sumpTempElement, jsonData.temp, 'sumpTemp'); }
+            if (jsonData.extPower !== undefined) { sumpPowerElement.textContent = jsonData.extPower.toFixed(2); applyCardLimit(sumpPowerElement, jsonData.extPower, 'sumpPower'); }
             if (jsonData.sumpRunTime !== undefined) sumpRuntimeElement.textContent = jsonData.sumpRunTime.toFixed(1);
             // Resync our own "last cycle started" timestamp against the
             // device's own freshly-computed timeSinceRun on every event,

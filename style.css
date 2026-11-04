@@ -360,6 +360,13 @@ small {
     border: 0px solid #333;
     min-width: 100px; 
 }
+/* Limit-based card backgrounds (see CARD_LIMITS in config.js) */
+.temp-card.limit-low  { background-color: #1e4fa3; }
+.temp-card.limit-high { background-color: #a31e1e; }
+.temp-card.limit-low .temp-card-label,  .temp-card.limit-high .temp-card-label,
+.temp-card.limit-low .temp-card-stats,  .temp-card.limit-high .temp-card-stats { color: #ffffff; }
+.sump-precip-total { text-align: center; margin: 4px 0 12px; font-size: 0.95em; color: #b0bec5; }
+
 .temp-card-label {
     color: #90caf9; 
     font-size: 1em;

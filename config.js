@@ -74,3 +74,20 @@ console.log("DEBUG: config.js loaded.");
 if (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined') { // Cleanup if old variable exists
     console.warn("DEBUG: Old GOOGLE_APPS_SCRIPT_URL found in config.js, consider removing it if TEMP_MONITOR_HISTORY_CSV_URL is used for CSV fetching.");
 }
+
+
+// -- Analog card limits ------------------------------------------------------
+// Card background turns BLUE when the value is below `low` and RED when above
+// `high`; inside the range it keeps the normal background. Use null to skip a side.
+// Edit the numbers here to tune; no other code changes are needed.
+const CARD_LIMITS = {
+  fridge:         { low: 34,  high: 41  },  // deg F
+  freezer:        { low: -20, high: 10  },  // deg F
+  garage:         { low: 35,  high: 95  },  // deg F
+  sumpTemp:       { low: 45,  high: 80  },  // deg F, basement
+  sumpPower:      { low: null, high: null }, // volts; set once the normal supply voltage is known
+  nestTemp:       { low: 62,  high: 78  },  // deg F, indoor
+  nestHumidity:   { low: 25,  high: 60  },  // % RH
+  aquariumWater:  { low: 77,  high: 81  },  // deg F
+  aquariumAmbient:{ low: 55,  high: 85  }   // deg F
+};
