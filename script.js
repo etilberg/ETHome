@@ -2734,7 +2734,8 @@ function renderSumpStats(sumpData) {
             const recentMedian = medianOf(recent.map(c => c.runTime));
             if (baseMedian > 0) {
                 const pct = (recentMedian / baseMedian - 1) * 100;
-                trendText = `${pct >= 0 ? '+' : ''}${pct.toFixed(0)}%`;
+                const rounded = Math.round(pct); // avoids "-0%"
+                trendText = `${rounded > 0 ? '+' : ''}${rounded}%`;
                 const warnPct = typeof SUMP_RUNTIME_TREND_WARN_PCT !== 'undefined' ? SUMP_RUNTIME_TREND_WARN_PCT : 25;
                 warn = pct > warnPct;
             }
