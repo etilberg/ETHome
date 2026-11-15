@@ -38,7 +38,7 @@ enabled = true
 # check still runs and GET /health still reports what it sees, but nothing
 # is sent.
 [vars]
-ALERTS_ENABLED = "false"
+ALERTS_ENABLED = "true"
 
 [triggers]
 crons = ["*/5 * * * *"]
