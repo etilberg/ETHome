@@ -111,6 +111,36 @@ https://nestservices.google.com/partnerconnections and redo steps 4-6 to get
 a clean one -- Google doesn't let you invalidate just the exposure, only the
 whole authorization.
 
+## Alerts, health check and PIN lockout
+
+**Alerts.** After each 5-minute Nest poll the Worker checks:
+
+- the stored Nest history is still being added to (stale after 20 minutes);
+- each Particle board (fridge/freezer, sump, aquarium) -- a board counts as
+  down only when Particle reports it offline *and* it hasn't been heard from
+  for 15 minutes.
+
+A problem that lasts 10 minutes produces one notification, a reminder every
+12 hours while it continues, and a "back to normal" note when it clears.
+Notifications are sent by publishing a private Particle event named
+`pushbullet`, which the account's existing `pushbullet` webhook (the one the
+firmware uses) delivers -- no extra secret is needed.
+
+Alerts are switched by `ALERTS_ENABLED` under `[vars]` in `wrangler.toml`
+(`"true"` / `"false"`). `GET /health` shows what the check currently sees
+whether or not alerts are on, and the dashboard's **Send Test Alert** button
+(Diagnostics, PIN required) sends one notification on demand.
+
+**Daily HVAC totals.** Each poll also stores the outdoor temperature (NWS
+station KATY) with the reading and adds to a per-day total of heating and
+cooling minutes, kept for 90 days under the `nest:daily` KV key and served
+at `GET /nest/daily`. This doubles KV writes to about 576 a day, inside the
+free tier's 1,000.
+
+**PIN lockout.** Five wrong PINs from one address lock the PIN-protected
+routes for that address for 15 minutes (HTTP 429). It is still a deterrent,
+not a strong boundary.
+
 ## Ongoing changes
 
 Because this folder is connected via Cloudflare's Git integration, pushing a

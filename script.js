@@ -111,11 +111,15 @@ const MASTER_CACHE_DURATION = 1 * 60 * 60 * 1000; // 1 hours in milliseconds
 const WEATHER_CACHE_VERSION = 'iemre-precip-v5';
 
 function calculateMinMax(array) {
-  if (!array.length) return { min: null, max: null };
-  return {
-    min: Math.min(...array),
-    max: Math.max(...array)
-  };
+  // Ignores null/NaN entries (a bad sheet row or a sensor dropout) instead of
+  // letting one of them turn the whole result into NaN.
+  let min = null, max = null;
+  for (const v of array) {
+    if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+    if (min === null || v < min) min = v;
+    if (max === null || v > max) max = v;
+  }
+  return { min, max };
 }
 
 // ================================
@@ -138,7 +142,64 @@ const diagState = {
     aquariumLastFetch: null,   // timestamp (ms) of the last successful AIO fetch
     lastError: null,
     tempLastEventMs: null,     // when the last live fridge/freezer/garage event arrived
+    sumpLastEventMs: null,     // when the last live sumpData event arrived
 };
+
+// Reference point for "has this source gone quiet?" checks in the status dot.
+// Reset whenever the tab comes back from the background, since nothing can
+// arrive while a phone has the page suspended -- without this, returning to
+// the tab would flash red until the first fresh event landed.
+let statusBaselineMs = Date.now();
+
+// When the Worker last stored a Nest reading (from /nest/current).
+let nestLatestMs = null;
+
+// ================================
+// Google Sheets CSV cache
+// ================================
+// The published sheets are large (the fridge sheet was 17 MB), so each one is
+// downloaded at most once per maxAgeMs and re-used for every range change
+// and for both sump consumers (history charts + 90-day analytics), instead
+// of being re-downloaded on every dropdown change and every 5-minute tick.
+// Only the newest keepDays of rows are held in memory.
+const TEMP_CSV_MAX_AGE_MS = 10 * 60 * 1000;
+const SUMP_CSV_MAX_AGE_MS = 4.5 * 60 * 1000;
+const csvCache = new Map(); // url -> { lines, fetchedAt, promise }
+
+function trimCsvLinesToDays(lines, keepDays) {
+    if (!keepDays || lines.length < 3) return lines;
+    const cutoffMs = Date.now() - keepDays * 24 * 3600000;
+    // Rows are chronological, so walk back from the end until one is too old.
+    let firstKept = 1;
+    for (let i = lines.length - 1; i >= 1; i--) {
+        const comma = lines[i].indexOf(',');
+        const tsMs = new Date(comma === -1 ? lines[i] : lines[i].slice(0, comma)).getTime();
+        if (isNaN(tsMs)) continue;
+        if (tsMs < cutoffMs) { firstKept = i + 1; break; }
+    }
+    return firstKept <= 1 ? lines : [lines[0]].concat(lines.slice(firstKept));
+}
+
+function fetchCsvLines(url, maxAgeMs, options = {}) {
+    let entry = csvCache.get(url);
+    if (!entry) { entry = { lines: null, fetchedAt: 0, promise: null }; csvCache.set(url, entry); }
+    if (entry.lines && Date.now() - entry.fetchedAt < maxAgeMs) return Promise.resolve(entry.lines);
+    if (entry.promise) return entry.promise;
+
+    entry.promise = fetch(url)
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response.text();
+        })
+        .then(csvText => {
+            const lines = csvText.trim().split('\n').map(l => l.replace(/\r$/, ''));
+            entry.lines = trimCsvLinesToDays(lines, options.keepDays);
+            entry.fetchedAt = Date.now();
+            return entry.lines;
+        })
+        .finally(() => { entry.promise = null; });
+    return entry.promise;
+}
 
 function formatAgo(timestampMs) {
     if (!timestampMs) return '--';
@@ -249,6 +310,45 @@ function renderDiagnostics() {
     if (diagAquariumConnElement) diagAquariumConnElement.textContent = diagState.aquariumConn;
     if (diagAquariumDataAgeElement) diagAquariumDataAgeElement.textContent = formatAgo(diagState.aquariumLastFetch);
     if (diagLastErrorElement) diagLastErrorElement.textContent = diagState.lastError ?? 'None';
+}
+
+// Draws each card's low/high limits (CARD_LIMITS in config.js) as dashed
+// horizontal lines on the matching chart: blue for low, red for high. A line
+// outside the chart's current y-range simply isn't drawn -- the limits never
+// stretch the axis, so normal data keeps its full vertical resolution.
+const limitLinesPlugin = {
+    id: 'limitLines',
+    afterDatasetsDraw(chart) {
+        const lines = chart.$limitLines;
+        if (!lines || !lines.length) return;
+        const { ctx, chartArea } = chart;
+        ctx.save();
+        ctx.lineWidth = 1;
+        ctx.setLineDash([6, 4]);
+        for (const line of lines) {
+            const scale = chart.scales[line.scaleID];
+            if (!scale || line.value === null || line.value === undefined) continue;
+            const y = scale.getPixelForValue(line.value);
+            if (y < chartArea.top || y > chartArea.bottom) continue;
+            ctx.strokeStyle = line.color;
+            ctx.beginPath();
+            ctx.moveTo(chartArea.left, y);
+            ctx.lineTo(chartArea.right, y);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+};
+if (typeof Chart !== 'undefined') Chart.register(limitLinesPlugin);
+
+function setLimitLines(chart, limitKey, scaleID = 'y') {
+    if (!chart || typeof CARD_LIMITS === 'undefined' || !CARD_LIMITS[limitKey]) return;
+    const lim = CARD_LIMITS[limitKey];
+    chart.$limitLines = [
+        { scaleID, value: lim.low, color: 'rgba(84, 160, 255, 0.9)' },
+        { scaleID, value: lim.high, color: 'rgba(255, 107, 107, 0.9)' }
+    ];
+    chart.update();
 }
 
 function createChart(canvasId, label, borderColor, yLabel = 'Temperature (°F)') {
@@ -362,6 +462,10 @@ async function resolveNwsStation() {
         console.log(`DEBUG: NWS resolved nearest station to ${nwsStationIdCache}`);
         return nwsStationIdCache;
     })();
+    // A failed lookup must not be remembered -- otherwise one network blip
+    // at page load would keep every later weather refresh failing until a
+    // full reload.
+    nwsStationResolutionPromise.catch(() => { nwsStationResolutionPromise = null; });
 
     return nwsStationResolutionPromise;
 }
@@ -600,9 +704,17 @@ async function refreshNestData(rangeHours) {
         updateNestLiveCards(latest);
         updateNestChart(inRange);
         updateNestDutyCycle(inRange);
+        refreshHvacDailyChart();
 
         if (nestStatusElement) {
-            nestStatusElement.textContent = inRange.length > 0 ? `Loaded ${inRange.length} points` : "No data yet";
+            const staleMin = typeof STATUS_NEST_STALE_MIN !== 'undefined' ? STATUS_NEST_STALE_MIN : 20;
+            if (nestLatestMs && Date.now() - nestLatestMs > staleMin * 60000) {
+                // The Worker's poll has stopped storing readings -- say so
+                // rather than presenting an old value as current.
+                nestStatusElement.textContent = `Stale: last reading ${formatAgo(nestLatestMs)}`;
+            } else {
+                nestStatusElement.textContent = inRange.length > 0 ? `Loaded ${inRange.length} points` : "No data yet";
+            }
         }
         if (nestLastUpdatedElement) {
             nestLastUpdatedElement.textContent = new Date().toLocaleTimeString();
@@ -632,6 +744,7 @@ function applyCardLimit(el, value, key) {
 
 function updateNestLiveCards(latest) {
     if (!latest) return;
+    if (latest.t) nestLatestMs = latest.t;
 
     if (nestTempElement) {
         nestTempElement.textContent = (latest.indoorTemp !== null && latest.indoorTemp !== undefined) ? latest.indoorTemp.toFixed(1) : '--';
@@ -690,6 +803,57 @@ function updateNestDutyCycle(history) {
 
     heatEl.textContent = `${Math.round((heatingCount / history.length) * 100)}%`;
     coolEl.textContent = `${Math.round((coolingCount / history.length) * 100)}%`;
+}
+
+// --- HVAC run time per day ---
+// The Worker keeps a rolling per-day total of heating/cooling minutes (plus
+// the day's average outdoor temp) so this can reach back further than the
+// 7-day raw history. Days the Worker has no outdoor average for (anything
+// from before it started recording one) fall back to the KATY observations
+// already loaded for the weather charts, where those cover the day.
+let hvacDailyChartInstance = null;
+
+function localDayKeyFromMs(ms) {
+    const d = new Date(ms);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+async function refreshHvacDailyChart() {
+    if (!hvacDailyChartInstance) return;
+    try {
+        const resp = await fetch(`${PARTICLE_PROXY_BASE_URL}/nest/daily`);
+        if (!resp.ok) return; // older Worker without this route: leave the chart empty
+        const { daily } = await resp.json();
+        const days = (daily || []).slice(-30);
+
+        const katySums = new Map();
+        try {
+            for (const o of await fetchKatyRawObservations()) {
+                if (o.temp === null) continue;
+                const key = localDayKeyFromMs(o.t);
+                const s = katySums.get(key) || { sum: 0, n: 0 };
+                s.sum += o.temp; s.n += 1;
+                katySums.set(key, s);
+            }
+        } catch (e) { /* outdoor fallback is optional */ }
+
+        const todayKey = localDayKeyFromMs(Date.now());
+        hvacDailyChartInstance.data.labels = days.map(d => {
+            if (d.d === todayKey) return 'Today';
+            const [, m, day] = d.d.split('-');
+            return `${Number(m)}/${Number(day)}`;
+        });
+        hvacDailyChartInstance.data.datasets[0].data = days.map(d => d.heatHours);
+        hvacDailyChartInstance.data.datasets[1].data = days.map(d => d.coolHours);
+        hvacDailyChartInstance.data.datasets[2].data = days.map(d => {
+            if (d.outdoorAvg !== null && d.outdoorAvg !== undefined) return d.outdoorAvg;
+            const s = katySums.get(d.d);
+            return s && s.n >= 12 ? s.sum / s.n : null;
+        });
+        hvacDailyChartInstance.update();
+    } catch (error) {
+        console.error("DEBUG: HVAC daily fetch failed:", error);
+    }
 }
 
 // Collapses a time-sorted array of {t, ...} points down to at most one per
@@ -868,6 +1032,12 @@ async function displayCurrentWeather() {
 // --- Initialize Charts and Load Initial Data ---
 document.addEventListener('DOMContentLoaded', () => {
     displayCurrentWeather();
+    // Chart.js's default text/grid colors assume a light page; on this dark
+    // theme they left legends and gridlines close to invisible.
+    if (typeof Chart !== 'undefined') {
+        Chart.defaults.color = '#b0bec5';
+        Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.08)';
+    }
     //console.log("DEBUG: DOM loaded, initializing charts.");
     if (typeof TEMP_MONITOR_DEVICE_ID === 'undefined' || typeof TEMP_MONITOR_HISTORY_CSV_URL === 'undefined') {
         console.error("DEBUG: Configuration variables from config.js seem to be missing!");
@@ -885,8 +1055,8 @@ document.addEventListener('DOMContentLoaded', () => {
             fridgeChartInstance.data.datasets.push({
                 label: 'Heater Status',
                 data: heaterStatusHistory,
-                borderColor: 'rgb(100, 50, 0.3)',
-                backgroundColor: 'rgba(125, 75, 0, 0.1)',
+                borderColor: 'rgb(214, 143, 61)',
+                backgroundColor: 'rgba(214, 143, 61, 0.15)',
                 yAxisID: 'y2',
                 stepped: true,
                 pointRadius: 0,             // hide data points
@@ -899,13 +1069,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 title: {
                     display: true,
                     text: 'Heater Status',
-                    color: 'rgb(100, 50, 0.3)'
+                    color: 'rgb(214, 143, 61)'
                 },
                 min: 0,
                 max: 1,
                 ticks: {
                     stepSize: 1,
-                    color: 'rgb(100, 50, 0.3)'
+                    color: 'rgb(214, 143, 61)'
                 },
                 grid: {
                     drawOnChartArea: false
@@ -1279,6 +1449,63 @@ if (sumpRunsPerDayChartInstance) {
         aquariumCtx.addEventListener('dblclick', () => aquariumChartInstance.resetZoom());
     }
 
+    // HVAC run time per day: heating/cooling hours as bars, the day's average
+    // outdoor temperature as a line on its own right-hand axis.
+    const hvacDailyCtx = document.getElementById('hvacDailyChart')?.getContext('2d');
+    if (hvacDailyCtx) {
+        hvacDailyChartInstance = new Chart(hvacDailyCtx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'Heating (hours)', data: [], backgroundColor: 'rgba(255, 107, 107, 0.7)', yAxisID: 'y_hours' },
+                    { label: 'Cooling (hours)', data: [], backgroundColor: 'rgba(84, 160, 255, 0.7)', yAxisID: 'y_hours' },
+                    { label: 'Avg Outdoor Temp (°F)', data: [], type: 'line', borderColor: 'rgb(255, 206, 86)', backgroundColor: 'rgb(255, 206, 86)', yAxisID: 'y_outdoor', pointRadius: 2, borderWidth: 2, tension: 0.2, spanGaps: true }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    y_hours: {
+                        type: 'linear', position: 'left', beginAtZero: true,
+                        title: { display: true, text: 'Run time (hours)' }
+                    },
+                    y_outdoor: {
+                        type: 'linear', position: 'right',
+                        title: { display: true, text: 'Outdoor (°F)', color: 'rgb(255, 206, 86)' },
+                        ticks: { color: 'rgb(255, 206, 86)' },
+                        grid: { drawOnChartArea: false }
+                    }
+                },
+                plugins: {
+                    legend: { display: true },
+                    title: { display: true, text: 'HVAC Run Time per Day' },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                const v = ctx.parsed.y;
+                                if (v === null || v === undefined) return `${ctx.dataset.label}: --`;
+                                return `${ctx.dataset.label}: ${v.toFixed(1)}`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Dashed low/high limit lines on the charts whose cards have limits.
+    // Only one limited series per chart gets lines, so there's never a
+    // question of which axis a line belongs to.
+    setLimitLines(fridgeChartInstance, 'fridge');
+    setLimitLines(freezerChartInstance, 'freezer');
+    setLimitLines(garageChartInstance, 'garage');
+    setLimitLines(sumpTempChartInstance, 'sumpTemp');
+    setLimitLines(nestChartInstance, 'nestTemp', 'y_temp');
+    setLimitLines(aquariumChartInstance, 'aquariumWater', 'y_water');
+
     // Start SSE connections
     connectTempMonitorSSE();
     connectSumpMonitorSSE();
@@ -1286,29 +1513,18 @@ if (sumpRunsPerDayChartInstance) {
     // Load initial historical data based on default dropdown selection
     const initialHours = parseInt(document.getElementById('history-range').value, 10);
     currentSumpRangeHours = initialHours;
-    fetchTempMonitorHistoricalData(initialHours);
-    fetchSumpHistoricalData(initialHours); 
-    refreshKatyWeatherChart(initialHours);
-    refreshNestData(initialHours);
-    fetchAquariumData(initialHours);
+    refreshAllData(initialHours, { includeTempHistory: true });
 
-    // ======================= CALL THE NEW ANALYTICS FETCH =======================
-    fetchSumpAnalyticsData();
-
-    // Periodically rebuild the sump charts from source data (CSV history) so
-    // they pick up new readings without live-appending raw points on top of
-    // aggregated bins. Runs on a timer independent of the SSE live feed.
-    // Also refreshes the KATY weather-detail charts and Nest thermostat data
-    // on the same 5-minute cadence -- safe for KATY since its own fetch is
-    // internally cached for 5 minutes regardless of how often this fires,
-    // and Nest data only actually changes as often as the Worker's own Cron
-    // Trigger polls it, so there's no benefit to refreshing more often.
+    // Periodically rebuild the slow-changing widgets from source data. The
+    // fridge/freezer/garage charts aren't in this loop -- the live stream
+    // keeps them current -- and the sheet/KATY fetches are internally cached,
+    // so this never downloads more often than each source actually changes.
     setInterval(() => {
-        fetchSumpHistoricalData(currentSumpRangeHours);
-        refreshKatyWeatherChart(currentSumpRangeHours);
-        refreshNestData(currentSumpRangeHours);
-        fetchAquariumData(currentSumpRangeHours);
+        refreshAllData(currentSumpRangeHours, { includeTempHistory: false });
     }, SUMP_CHART_REFRESH_INTERVAL_MS);
+
+    // Current conditions + forecast (the outdoor temp in the top bar).
+    setInterval(displayCurrentWeather, 10 * 60 * 1000);
 
     // Diagnostics panel: render immediately, then keep the relative "X ago"
     // fields (weather cache age, sump chart refresh age, CSV freshness)
@@ -1328,172 +1544,222 @@ if (sumpRunsPerDayChartInstance) {
             sumpSinceRunElement.textContent = formatDurationAutoScale(Date.now() - lastSumpCycleTimestamp);
         }
     }, 1000);
+
+    // Live-stream watchdog: both boards publish every ~2 minutes, so a
+    // stream that has been silent for several minutes is more likely a dead
+    // connection (which EventSource can't always detect by itself) than a
+    // quiet device. Reconnecting is cheap and harmless if the device really
+    // is offline.
+    setInterval(() => {
+        const now = Date.now();
+        if (now - Math.max(diagState.tempLastEventMs || 0, tempConnectStartedMs) > SSE_SILENCE_RECONNECT_MS) connectTempMonitorSSE();
+        if (now - Math.max(diagState.sumpLastEventMs || 0, sumpConnectStartedMs) > SSE_SILENCE_RECONNECT_MS) connectSumpMonitorSSE();
+    }, 60 * 1000);
 });
 
-// ... (rest of your script.js: history-range listener, resetZoomOnAllCharts, fetch functions, SSE connection functions) ...
+// One place that knows every data source, used by the initial load, the
+// periodic timer, the range dropdown, and the return-from-background handler.
+function refreshAllData(rangeHours, { includeTempHistory = false } = {}) {
+    if (includeTempHistory) fetchTempMonitorHistoricalData(rangeHours);
+    fetchSumpHistoricalData(rangeHours);
+    fetchSumpAnalyticsData();
+    refreshKatyWeatherChart(rangeHours);
+    refreshNestData(rangeHours);
+    fetchAquariumData(rangeHours);
+}
 
 // --- Event Listener for History Range Dropdown ---
 document.getElementById('history-range').addEventListener('change', function() {
     const selectedHours = parseInt(this.value, 10);
     currentSumpRangeHours = selectedHours;
-    fetchTempMonitorHistoricalData(selectedHours); // Renamed function
-    fetchSumpHistoricalData(selectedHours);      // New function
-    refreshKatyWeatherChart(selectedHours);
-    refreshNestData(selectedHours);
-    fetchAquariumData(selectedHours);
+    refreshAllData(selectedHours, { includeTempHistory: true });
 });
 
+// --- Coming back to the tab ---
+// A phone suspends a background tab: timers stop and the live streams are
+// dropped. After any real absence, reconnect and reload everything right
+// away instead of showing old numbers until the next timer tick.
+let tabHiddenSinceMs = null;
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        tabHiddenSinceMs = Date.now();
+        return;
+    }
+    const awayMs = tabHiddenSinceMs ? Date.now() - tabHiddenSinceMs : 0;
+    tabHiddenSinceMs = null;
+    if (awayMs < 2 * 60 * 1000) return;
+
+    statusBaselineMs = Date.now();
+    connectTempMonitorSSE();
+    connectSumpMonitorSSE();
+    displayCurrentWeather();
+    fetchFridgeHeaterState();
+    refreshAllData(currentSumpRangeHours, { includeTempHistory: true });
+    updateGlobalStatus();
+});
+
+// Live fridge/freezer/garage points received since page load. Kept
+// separately from the chart arrays so that rebuilding the charts from the
+// (cached, slightly older) sheet on a range change doesn't drop the newest
+// readings off the right-hand edge.
+let liveTempPoints = [];
+const LIVE_TEMP_POINTS_MAX = 6000; // ~8 days at one point per 2 minutes
+
+function toFiniteOrNull(v) {
+    const n = typeof v === 'number' ? v : parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+}
+
+function updateTempCharts() {
+    if (fridgeChartInstance) {
+        fridgeChartInstance.data.labels = timeHistory;
+        fridgeChartInstance.data.datasets[0].data = fridgeHistory;
+        fridgeChartInstance.data.datasets[1].data = heaterStatusHistory;
+        fridgeChartInstance.update();
+    }
+    if (freezerChartInstance) {
+        freezerChartInstance.data.labels = timeHistory;
+        freezerChartInstance.data.datasets[0].data = freezerHistory;
+        freezerChartInstance.update();
+    }
+    // NOTE: the garage chart's Outdoor Temp overlay (datasets[1]) is managed
+    // independently by refreshKatyWeatherChart(), with its own timestamps.
+    if (garageChartInstance) {
+        garageChartInstance.data.labels = timeHistory;
+        garageChartInstance.data.datasets[0].data = garageHistory;
+        garageChartInstance.update();
+    }
+}
+
+// H/L values and heater run time for whatever is currently in the chart
+// arrays -- called after a history load AND after every live point, so the
+// numbers on the cards always describe the same window the charts show.
+function renderTempStats() {
+    const fmt = v => (v === null || v === undefined || !Number.isFinite(v)) ? '--' : v.toFixed(0);
+    const setStats = (id, mm) => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = `H: <span class="temp-high">${fmt(mm.max)}°</span> / L: <span class="temp-low">${fmt(mm.min)}°</span>`;
+    };
+    setStats('fridge-stats', calculateMinMax(fridgeHistory));
+    setStats('freezer-stats', calculateMinMax(freezerHistory));
+    setStats('garage-stats', calculateMinMax(garageHistory));
+
+    // Heater run time: sum of every ON stretch within the window. A stretch
+    // still running at the end of the data counts up to the last point.
+    let totalHeaterRunTimeMs = 0;
+    let runStartMs = null;
+    for (let i = 0; i < timeHistory.length; i++) {
+        const t = timeHistory[i].getTime();
+        const on = heaterStatusHistory[i] === 1;
+        if (on && runStartMs === null) {
+            runStartMs = t;
+        } else if (!on && runStartMs !== null) {
+            totalHeaterRunTimeMs += t - runStartMs;
+            runStartMs = null;
+        }
+    }
+    if (runStartMs !== null && timeHistory.length > 0) {
+        totalHeaterRunTimeMs += timeHistory[timeHistory.length - 1].getTime() - runStartMs;
+    }
+
+    if (liveHeaterValueElement) {
+        const totalSeconds = totalHeaterRunTimeMs / 1000;
+        if (totalSeconds >= 5400) {
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            liveHeaterValueElement.textContent = minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+        } else if (totalSeconds > 60) {
+            liveHeaterValueElement.textContent = `${(totalSeconds / 60).toFixed(1)} min`;
+        } else {
+            liveHeaterValueElement.textContent = `${Math.round(totalSeconds)} s`;
+        }
+    }
+}
+
 function fetchTempMonitorHistoricalData(rangeHours = 1) {
-    console.log(`DEBUG: Fetching Temp Monitor historical data for last ${rangeHours} hours.`);
+    console.log(`DEBUG: Loading Temp Monitor history for last ${rangeHours} hours.`);
 
     if (!TEMP_MONITOR_HISTORY_CSV_URL || TEMP_MONITOR_HISTORY_CSV_URL.includes("YOUR_")) {
         console.error("DEBUG: TEMP_MONITOR_HISTORY_CSV_URL is not set or still a placeholder.");
         return;
     }
 
-    fetch(TEMP_MONITOR_HISTORY_CSV_URL)
-        .then(response => {
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            return response.text();
-        })
-        .then(csvText => {
-            const lines = csvText.trim().split('\n');
+    fetchCsvLines(TEMP_MONITOR_HISTORY_CSV_URL, TEMP_CSV_MAX_AGE_MS, { keepDays: 8 })
+        .then(lines => {
             if (lines.length <= 1) {
                 console.warn("DEBUG: Temp CSV has no data rows.");
                 return;
             }
 
-            // Diagnostics: how fresh is the underlying Google Sheet, regardless
-            // of the currently-selected range (captured from the raw last row,
-            // not the range-filtered data, so it stays meaningful even if the
-            // sheet is stale relative to a short selected range).
-            const lastRawCols = lines[lines.length - 1].split(',');
-            const lastRawTs = new Date(lastRawCols[0]);
+            // Diagnostics: how fresh is the underlying Google Sheet, from
+            // the raw last row regardless of the selected range.
+            const lastRawTs = new Date(lines[lines.length - 1].split(',')[0]);
             if (!isNaN(lastRawTs.getTime())) {
                 diagState.tempCsvLatest = lastRawTs.getTime();
                 renderDiagnostics();
             }
 
-            // Clear existing history arrays
+            // Rows are chronological, so read back from the newest row and
+            // stop at the first one older than the selected range, rather
+            // than date-parsing the whole sheet.
+            const cutoffMs = Date.now() - rangeHours * 3600000;
+            const points = [];
+            for (let i = lines.length - 1; i >= 1; i--) {
+                const cols = lines[i].split(',');
+                if (cols.length < 6) continue; // short/blank row
+                const ts = new Date(cols[0]);
+                const tsMs = ts.getTime();
+                if (isNaN(tsMs)) continue;
+                if (tsMs < cutoffMs) break;
+                points.push({
+                    ts,
+                    garage: toFiniteOrNull(cols[1]),
+                    freezer: toFiniteOrNull(cols[2]),
+                    fridge: toFiniteOrNull(cols[3]),
+                    heaterStatus: parseInt(cols[5], 10) === 1 ? 1 : 0
+                });
+            }
+            points.reverse();
+
+            // Add live points the sheet doesn't have yet (the sheet copy
+            // may be a few minutes old; see liveTempPoints).
+            const lastSheetMs = points.length > 0 ? points[points.length - 1].ts.getTime() : 0;
+            for (const p of liveTempPoints) {
+                const t = p.ts.getTime();
+                if (t > lastSheetMs + 30000 && t >= cutoffMs) points.push(p);
+            }
+
             timeHistory.length = 0;
             fridgeHistory.length = 0;
             freezerHistory.length = 0;
             garageHistory.length = 0;
             heaterStatusHistory.length = 0;
-            
-            // --- NEW LOGIC FOR RUNTIME CALCULATION ---
-            let totalHeaterRunTimeMs = 0; // Total runtime in milliseconds
-            let runStartTime = null;      // Timestamp when a run cycle starts
-            const now = new Date();
-
-            // First, filter all relevant data points from the CSV into an array
-            // This assumes the CSV is sorted chronologically
-            const dataInRange = lines.slice(1).map(line => {
-                const cols = line.split(',');
-                const ts = new Date(cols[0]);
-                if (isNaN(ts.getTime())) return null;
-
-                const diffHours = (now - ts) / (1000 * 60 * 60);
-                if (diffHours > rangeHours) return null;
-
-                return {
-                    ts: ts,
-                    garage: parseFloat(cols[1]),
-                    freezer: parseFloat(cols[2]),
-                    fridge: parseFloat(cols[3]),
-                    heaterStatus: parseInt(cols[5].trim().replace('\r', ''))
-                };
-            }).filter(p => p !== null); // Remove any null (invalid or out-of-range) entries
-
-            // Now, iterate through the filtered data to calculate runtime and populate charts
-            for (const point of dataInRange) {
-                const { ts, heaterStatus } = point;
-
-                // If heater turns ON and a run cycle wasn't already started
-                if (heaterStatus === 1 && !runStartTime) {
-                    runStartTime = ts;
-                } 
-                // If heater turns OFF and a run cycle WAS in progress
-                else if (heaterStatus === 0 && runStartTime) {
-                    const duration = ts.getTime() - runStartTime.getTime();
-                    totalHeaterRunTimeMs += duration;
-                    runStartTime = null; // Reset for the next cycle
-                }
-
-                // Push data to chart history arrays
-                timeHistory.push(point.ts);
-                fridgeHistory.push(point.fridge);
-                freezerHistory.push(point.freezer);
-                garageHistory.push(point.garage);
-                heaterStatusHistory.push(point.heaterStatus);
+            for (const p of points) {
+                timeHistory.push(p.ts);
+                fridgeHistory.push(p.fridge);
+                freezerHistory.push(p.freezer);
+                garageHistory.push(p.garage);
+                heaterStatusHistory.push(p.heaterStatus);
             }
-
-            // Edge Case: Handle a run cycle that is still active at the end of the time range
-            if (runStartTime && timeHistory.length > 0) {
-                const lastTimestamp = timeHistory[timeHistory.length - 1];
-                const duration = lastTimestamp.getTime() - runStartTime.getTime();
-                totalHeaterRunTimeMs += duration;
-            }
-            // --- END OF NEW LOGIC ---
 
             console.log(`DEBUG: Loaded ${timeHistory.length} points of fridge/freezer/garage history.`);
 
-            // Update charts with the new data
-            if (fridgeChartInstance) {
-                fridgeChartInstance.data.labels = timeHistory;
-                fridgeChartInstance.data.datasets[0].data = fridgeHistory;
-                fridgeChartInstance.data.datasets[1].data = heaterStatusHistory;
-                fridgeChartInstance.update();
-            }
-            if (freezerChartInstance) {
-                freezerChartInstance.data.labels = timeHistory;
-                freezerChartInstance.data.datasets[0].data = freezerHistory;
-                freezerChartInstance.update();
-            }
-            if (garageChartInstance) {
-                garageChartInstance.data.labels = timeHistory;
-                garageChartInstance.data.datasets[0].data = garageHistory;
-                garageChartInstance.update();
-            }
+            updateTempCharts();
+            renderTempStats();
 
-            const fridgeMinMax = calculateMinMax(fridgeHistory);
-            const freezerMinMax = calculateMinMax(freezerHistory);
-            const garageMinMax = calculateMinMax(garageHistory);
-
-            document.getElementById('fridge-stats').innerHTML = `H: <span class="temp-high">${fridgeMinMax.max?.toFixed(0)}°</span> / L: <span class="temp-low">${fridgeMinMax.min?.toFixed(0)}°</span>`;
-            document.getElementById('freezer-stats').innerHTML = `H: <span class="temp-high">${freezerMinMax.max?.toFixed(0)}°</span> / L: <span class="temp-low">${freezerMinMax.min?.toFixed(0)}°</span>`;
-            document.getElementById('garage-stats').innerHTML = `H: <span class="temp-high">${garageMinMax.max?.toFixed(0)}°</span> / L: <span class="temp-low">${garageMinMax.min?.toFixed(0)}°</span>`;
-
-            // Update heater display with the calculated total run time
-            if (liveHeaterValueElement) {
-                const totalHeaterRunTimeSeconds = totalHeaterRunTimeMs / 1000;
-            
-                if (totalHeaterRunTimeSeconds >= 5400) {
-                    // 5400 seconds = 90 minutes
-                    const hours = Math.floor(totalHeaterRunTimeSeconds / 3600);
-                    const minutes = Math.floor((totalHeaterRunTimeSeconds % 3600) / 60);
-                    liveHeaterValueElement.textContent = minutes > 0 
-                        ? `${hours}h ${minutes}m`
-                        : `${hours}h`;
-                } else if (totalHeaterRunTimeSeconds > 60) {
-                    // Between 1 minute and 90 minutes
-                    liveHeaterValueElement.textContent = `${(totalHeaterRunTimeSeconds / 60).toFixed(1)} min`;
-                } else {
-                    // Under 1 minute
-                    liveHeaterValueElement.textContent = `${Math.round(totalHeaterRunTimeSeconds)} s`;
+            // Until the first live event arrives (up to 2 minutes after the
+            // page opens), show the newest sheet row on the cards -- but
+            // only if it is recent enough to pass for "now".
+            if (diagState.tempLastEventMs === null && points.length > 0) {
+                const last = points[points.length - 1];
+                if (Date.now() - last.ts.getTime() < 15 * 60 * 1000) {
+                    if (last.fridge !== null) { liveFridgeElement.textContent = last.fridge.toFixed(1); applyCardLimit(liveFridgeElement, last.fridge, 'fridge'); }
+                    if (last.freezer !== null) { liveFreezerElement.textContent = last.freezer.toFixed(1); applyCardLimit(liveFreezerElement, last.freezer, 'freezer'); }
+                    if (last.garage !== null) { liveGarageElement.textContent = last.garage.toFixed(1); applyCardLimit(liveGarageElement, last.garage, 'garage'); }
+                    if (liveHeaterStatusElement) liveHeaterStatusElement.textContent = last.heaterStatus === 1 ? "On" : "Off";
+                    tempMonitorLastUpdatedElement.textContent = `${last.ts.toLocaleTimeString()} (from history)`;
                 }
             }
-
-            if (heaterStatusHistory.length > 0 && liveHeaterStatusElement) {
-                const lastHeaterStatus = heaterStatusHistory[heaterStatusHistory.length - 1];
-                liveHeaterStatusElement.textContent = lastHeaterStatus === 1 ? "On" : "Off";
-            }
-
-            // NOTE: The garage chart's Outdoor Temp overlay is no longer
-            // populated here -- it's driven by refreshKatyWeatherChart()
-            // instead (see there), which sources it from KATY's own ~5-min
-            // observations rather than an hourly bucket lookup tied to the
-            // garage sensor's own reporting cadence.
         })
         .catch(err => {
             logDiagError("Temp Monitor history fetch", err);
@@ -1510,6 +1776,31 @@ let aquariumLastReadingMs = null;
 // response carries CORS headers and the browser can read it cross-origin.
 // Feeds must be set to Public in Adafruit IO (Feed Info → Visibility → Public).
 // ?limit=500 covers ~41 hours at 5-min logging. Increase if you want more history.
+// Adafruit IO returns at most 1,000 points per request, newest first, so a
+// long range is read in pages: each next page asks for points older than the
+// oldest one received so far (end_time is exclusive), until the selected
+// range is covered. `include` trims each point to the two fields used here.
+async function fetchAioFeed(baseUrl, cutoffMs) {
+    const hours = (Date.now() - cutoffMs) / 3600000;
+    const perPage = Math.min(1000, Math.max(50, Math.ceil(hours * 12 * 1.15) + 5));
+    const all = [];
+    let endTime = null;
+    for (let page = 0; page < 5; page++) {
+        let url = `${baseUrl}?limit=${perPage}&include=value,created_at`;
+        if (endTime) url += `&end_time=${encodeURIComponent(endTime)}`;
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const items = await resp.json();
+        if (!Array.isArray(items) || items.length === 0) break;
+        all.push(...items);
+        const oldest = items[items.length - 1].created_at;
+        if (items.length < perPage) break;
+        if (new Date(oldest).getTime() <= cutoffMs) break;
+        endTime = oldest;
+    }
+    return all;
+}
+
 function fetchAquariumData(rangeHours = 4) {
     if (typeof AQUARIUM_WATER_CSV_URL === 'undefined' ||
         AQUARIUM_WATER_CSV_URL.includes('your_adafruit_username')) {
@@ -1520,16 +1811,12 @@ function fetchAquariumData(rangeHours = 4) {
     }
 
     const cutoff = new Date(Date.now() - rangeHours * 60 * 60 * 1000);
-
-    // Compute limit to cover the full selected range at 5-min logging intervals,
-    // plus a 15% buffer. Minimum 500 so short ranges still load quickly.
-    const limit       = Math.max(500, Math.ceil(rangeHours * 12 * 1.15));
     const baseWater   = AQUARIUM_WATER_CSV_URL.split('?')[0];
     const baseAmbient = AQUARIUM_AMBIENT_CSV_URL.split('?')[0];
 
     Promise.all([
-        fetch(`${baseWater}?limit=${limit}`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
-        fetch(`${baseAmbient}?limit=${limit}`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+        fetchAioFeed(baseWater, cutoff.getTime()),
+        fetchAioFeed(baseAmbient, cutoff.getTime())
     ])
     .then(([waterData, ambientData]) => {
         const water   = parseAioJson(waterData,   cutoff);
@@ -1550,6 +1837,7 @@ function fetchAquariumData(rangeHours = 4) {
 
         const statusEl = document.getElementById('aquarium-status');
         if (statusEl) { statusEl.textContent = 'Live'; statusEl.style.color = 'green'; }
+        renderAquariumReadingAge();
     })
     .catch(err => {
         console.error('Aquarium: fetch error:', err);
@@ -1567,19 +1855,26 @@ function fetchAquariumData(rangeHours = 4) {
 function parseAioJson(dataArray, cutoff) {
     const OFFLINE = typeof AQUARIUM_OFFLINE_VALUE !== 'undefined' ? AQUARIUM_OFFLINE_VALUE : -999;
     let latest = null, latestTs = null, min = Infinity, max = -Infinity, count = 0;
+    // True when the single newest row is the offline sentinel -- i.e. the
+    // sensor is offline right now, even though older good readings exist.
+    let newestOffline = null;
     const points = []; // {x: Date, y: number} for Chart.js (parsing: false)
 
     for (const item of (dataArray || [])) {
         const ts  = new Date(item.created_at);
         const val = parseFloat(item.value);
         if (isNaN(ts.getTime()) || isNaN(val)) continue;
+
+        const isOffline = val <= OFFLINE + 1;
+        if (newestOffline === null) newestOffline = isOffline; // AIO returns newest-first
+
         if (ts < cutoff) continue;
 
         // Skip offline sentinel for all statistics
-        if (val <= OFFLINE + 1) continue;
+        if (isOffline) continue;
 
         if (latest === null) {
-            latest   = val;           // AIO returns newest-first
+            latest   = val;
             latestTs = ts.getTime();
         }
         if (val < min) min = val;
@@ -1594,6 +1889,7 @@ function parseAioJson(dataArray, cutoff) {
     return {
         latest:   latest,
         latestTs: latestTs,
+        newestOffline: newestOffline === true,
         min:      count > 0 ? min : null,
         max:      count > 0 ? max : null,
         points
@@ -1633,7 +1929,7 @@ function updateAquariumCard(water, ambient) {
     const ambStatsEl   = document.getElementById('aquarium-ambient-stats');
     // Water current reading
     if (waterLiveEl) {
-        if (water.latest !== null) {
+        if (water.latest !== null && !water.newestOffline) {
             waterLiveEl.textContent = water.latest.toFixed(1);
             applyCardLimit(waterLiveEl, water.latest, 'aquariumWater');
             waterLiveEl.style.color = '';
@@ -1670,12 +1966,13 @@ function updateAquariumCard(water, ambient) {
 
     // Ambient current reading
     if (ambLiveEl) {
-        if (ambient.latest !== null) {
+        if (ambient.latest !== null && !ambient.newestOffline) {
             ambLiveEl.textContent = ambient.latest.toFixed(1);
             applyCardLimit(ambLiveEl, ambient.latest, 'aquariumAmbient');
             ambLiveEl.style.color = '';
         } else {
             ambLiveEl.textContent = 'Offline';
+            applyCardLimit(ambLiveEl, null, 'aquariumAmbient');
             ambLiveEl.style.color = 'var(--text-danger, #e24b4a)';
         }
     }
@@ -1740,19 +2037,14 @@ function fetchSumpHistoricalData(rangeHours) {
         return;
     }
 
-    fetch(SUMP_HISTORY_CSV_URL)
-        .then(response => {
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            return response.text();
-        })
-        .then(csvText => {
-            const lines = csvText.trim().split('\n');
+    fetchCsvLines(SUMP_HISTORY_CSV_URL, SUMP_CSV_MAX_AGE_MS, { keepDays: 100 })
+        .then(lines => {
             if (lines.length <= 1) {
                 console.warn("DEBUG: Sump CSV has no data rows.");
                 return;
             }
 
-            const header = lines.shift().split(',');
+            const header = lines[0].split(',');
             const tsIdx = header.findIndex(h => h.toLowerCase().includes('timestamp'));
             const runtimeIdx = header.findIndex(h => h.toLowerCase().includes('sumpruntime'));
             const sinceRunIdx = header.findIndex(h => h.toLowerCase().includes('timesince'));
@@ -1862,8 +2154,16 @@ function fetchSumpHistoricalData(rangeHours) {
 
                 const precipTotalEl = document.getElementById('sump-precip-total');
                 if (precipTotalEl) {
-                    const totalPrecip = binnedPrecipData.reduce((sum, p) => sum + (Number(p) || 0), 0);
-                    const rangeLabel = rangeHours >= 168 ? 'past week' : `past ${rangeHours} hours`;
+                    // Summed straight from the hourly data for the hours that
+                    // overlap the selected window -- not from the bars, whose
+                    // first bin can reach back up to one bin-width (12 hours
+                    // on the week view) before the window starts.
+                    const windowStartMs = now - rangeHours * 3600000;
+                    let totalPrecip = 0;
+                    for (const [hourTs, entry] of weatherData.entries()) {
+                        if (hourTs + 3600000 > windowStartMs && hourTs <= now) totalPrecip += Number(entry?.precip) || 0;
+                    }
+                    const rangeLabel = rangeHours >= 168 ? 'past week' : (rangeHours === 1 ? 'past hour' : `past ${rangeHours} hours`);
                     precipTotalEl.textContent = `Total precipitation (${rangeLabel}): ${totalPrecip.toFixed(2)} in`;
                 }
 
@@ -1880,6 +2180,18 @@ function fetchSumpHistoricalData(rangeHours) {
             logDiagError("Sump history fetch", error);
         });
 }
+
+// --- Live stream connection management ---
+// EventSource reconnects by itself after a dropped connection, but NOT after
+// the server answers with an error status (it then closes for good), and it
+// can't always tell that a connection has silently died. So: a closed stream
+// is re-created here with a growing delay, and a watchdog (see
+// DOMContentLoaded) re-creates one that has been silent too long.
+const SSE_RECONNECT_MIN_MS = 5000;
+const SSE_RECONNECT_MAX_MS = 60000;
+const SSE_SILENCE_RECONNECT_MS = 6 * 60 * 1000;
+let tempEventSource = null, tempReconnectTimer = null, tempReconnectDelayMs = SSE_RECONNECT_MIN_MS, tempConnectStartedMs = Date.now();
+let sumpEventSource = null, sumpReconnectTimer = null, sumpReconnectDelayMs = SSE_RECONNECT_MIN_MS, sumpConnectStartedMs = Date.now();
 
 // --- Function to Connect to Temp Monitor SSE ---
 function connectTempMonitorSSE() {
@@ -1898,13 +2210,18 @@ function connectTempMonitorSSE() {
     tempMonitorStatusElement.textContent = "Connecting...";
     tempMonitorStatusElement.style.color = '#555';
 
+    if (tempEventSource) tempEventSource.close();
+    clearTimeout(tempReconnectTimer);
+    tempConnectStartedMs = Date.now();
     const eventSource = new EventSource(sseUrl);
+    tempEventSource = eventSource;
 
     eventSource.onopen = function() {
         console.log("DEBUG: Temp Monitor SSE Connected!");
         tempMonitorStatusElement.textContent = "Connected";
         tempMonitorStatusElement.style.color = 'green';
         diagState.tempConn = "Connected";
+        tempReconnectDelayMs = SSE_RECONNECT_MIN_MS;
         renderDiagnostics();
     };
 
@@ -1935,30 +2252,34 @@ function connectTempMonitorSSE() {
             tempMonitorStatusElement.textContent = "Receiving data";
             tempMonitorStatusElement.style.color = 'green';
 
-            // --- Update Data History & Charts (existing fridge/freezer/garage charts) ---
-            timeHistory.push(timestamp);
-            fridgeHistory.push(jsonData.fridge);
-            freezerHistory.push(jsonData.freezer);
-            garageHistory.push(jsonData.garage);
+            // --- Update Data History & Charts ---
+            const livePoint = {
+                ts: timestamp,
+                fridge: toFiniteOrNull(jsonData.fridge),
+                freezer: toFiniteOrNull(jsonData.freezer),
+                garage: toFiniteOrNull(jsonData.garage),
+                heaterStatus: (jsonData.heateron === 1 || jsonData.heateron === "1") ? 1 : 0
+            };
+            liveTempPoints.push(livePoint);
+            if (liveTempPoints.length > LIVE_TEMP_POINTS_MAX) liveTempPoints.shift();
 
-            // Keep the fridge chart's Heater Status overlay in step with the
-            // primary arrays -- it used to only get rebuilt on a full history
-            // fetch, so it would drift out of alignment as live points came in.
-            const heaterStatusValue = (jsonData.heateron === 1 || jsonData.heateron === "1") ? 1 : 0;
-            heaterStatusHistory.push(heaterStatusValue);
+            timeHistory.push(livePoint.ts);
+            fridgeHistory.push(livePoint.fridge);
+            freezerHistory.push(livePoint.freezer);
+            garageHistory.push(livePoint.garage);
+            heaterStatusHistory.push(livePoint.heaterStatus);
 
-            if (timeHistory.length > MAX_HISTORY_POINTS) {
+            // Keep the charts to the selected range: drop points that have
+            // aged out of it, so a tab left open on "4 hr" stays a 4-hour
+            // chart instead of slowly growing.
+            const rangeCutoffMs = Date.now() - currentSumpRangeHours * 3600000;
+            while (timeHistory.length > 0 && timeHistory[0].getTime() < rangeCutoffMs) {
                 timeHistory.shift(); fridgeHistory.shift(); freezerHistory.shift(); garageHistory.shift();
                 heaterStatusHistory.shift();
             }
 
-            if (fridgeChartInstance) { fridgeChartInstance.data.labels = timeHistory; fridgeChartInstance.data.datasets[0].data = fridgeHistory; fridgeChartInstance.data.datasets[1].data = heaterStatusHistory; fridgeChartInstance.update(); }
-            if (freezerChartInstance) { freezerChartInstance.data.labels = timeHistory; freezerChartInstance.data.datasets[0].data = freezerHistory; freezerChartInstance.update(); }
-            // NOTE: garageChartInstance's Outdoor Temp overlay (datasets[1]) is
-            // intentionally not touched here -- it's managed independently by
-            // refreshKatyWeatherChart() on its own ~5-min KATY refresh cadence,
-            // with its own {x,y} timestamps (see the dataset's parsing: false).
-            if (garageChartInstance) { garageChartInstance.data.labels = timeHistory; garageChartInstance.data.datasets[0].data = garageHistory; garageChartInstance.update(); }
+            updateTempCharts();
+            renderTempStats();
 
             diagState.tempConn = "Receiving data";
             renderDiagnostics();
@@ -1978,6 +2299,11 @@ function connectTempMonitorSSE() {
         tempMonitorStatusElement.style.color = 'red';
         diagState.tempConn = statusText;
         renderDiagnostics();
+        if (eventSource.readyState === EventSource.CLOSED) {
+            clearTimeout(tempReconnectTimer);
+            tempReconnectTimer = setTimeout(connectTempMonitorSSE, tempReconnectDelayMs);
+            tempReconnectDelayMs = Math.min(tempReconnectDelayMs * 2, SSE_RECONNECT_MAX_MS);
+        }
     };
 }
 
@@ -1998,13 +2324,18 @@ function connectSumpMonitorSSE() {
     sumpMonitorStatusElement.textContent = "Connecting...";
      sumpMonitorStatusElement.style.color = '#555';
 
+    if (sumpEventSource) sumpEventSource.close();
+    clearTimeout(sumpReconnectTimer);
+    sumpConnectStartedMs = Date.now();
     const eventSource = new EventSource(sseUrl);
+    sumpEventSource = eventSource;
 
     eventSource.onopen = function() {
         //console.log("DEBUG: Sump Monitor SSE Connected!");
         sumpMonitorStatusElement.textContent = "Connected";
         sumpMonitorStatusElement.style.color = 'green';
         diagState.sumpConn = "Connected";
+        sumpReconnectDelayMs = SSE_RECONNECT_MIN_MS;
         renderDiagnostics();
     };
 
@@ -2028,8 +2359,18 @@ function connectSumpMonitorSSE() {
             // between events instead of only updating once per ~2-min
             // device publish.
             if (jsonData.timeSinceRun !== undefined) {
-                lastSumpCycleTimestamp = timestamp.getTime() - jsonData.timeSinceRun * 60000;
+                const cycleStartMs = timestamp.getTime() - jsonData.timeSinceRun * 60000;
+                // A jump forward of more than a couple of minutes means a
+                // new cycle has happened since the last one we knew about,
+                // so the gap between the two becomes the "previous gap".
+                if (lastSumpCycleTimestamp !== null && cycleStartMs - lastSumpCycleTimestamp > 2 * 60 * 1000) {
+                    previousSumpCycleGapMs = cycleStartMs - lastSumpCycleTimestamp;
+                    const previousGapEl = document.getElementById('sump-previous-gap');
+                    if (previousGapEl) previousGapEl.textContent = formatDurationAutoScale(previousSumpCycleGapMs);
+                }
+                lastSumpCycleTimestamp = cycleStartMs;
             }
+            diagState.sumpLastEventMs = Date.now();
 
             sumpMonitorLastUpdatedElement.textContent = timestamp.toLocaleTimeString();
             sumpMonitorStatusElement.textContent = "Receiving data";
@@ -2063,6 +2404,11 @@ function connectSumpMonitorSSE() {
         sumpMonitorStatusElement.style.color = 'red';
         diagState.sumpConn = statusText;
         renderDiagnostics();
+        if (eventSource.readyState === EventSource.CLOSED) {
+            clearTimeout(sumpReconnectTimer);
+            sumpReconnectTimer = setTimeout(connectSumpMonitorSSE, sumpReconnectDelayMs);
+            sumpReconnectDelayMs = Math.min(sumpReconnectDelayMs * 2, SSE_RECONNECT_MAX_MS);
+        }
     };
 }
 /**
@@ -2085,7 +2431,7 @@ async function fetchIemrePrecipData() {
     // (instead of exactly 7) gives a small safety margin against day-boundary
     // mismatches between UTC and Central time -- any overlap is harmless
     // since entries end up keyed by their actual UTC hour timestamp anyway.
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 9; i++) {
         const day = new Date(Date.now() - i * 24 * 3600000);
         const dayStr = day.toISOString().split('T')[0];
         const url = `https://mesonet.agron.iastate.edu/iemre/hourly/${dayStr}/${NWS_LATITUDE}/${NWS_LONGITUDE}/json`;
@@ -2108,7 +2454,7 @@ async function fetchIemrePrecipData() {
             console.error(`DEBUG: IEMRE precip fetch failed for day ${dayStr}:`, dayError);
         }
 
-        if (i < 7) {
+        if (i < 8) {
             await new Promise(resolve => setTimeout(resolve, 150));
         }
     }
@@ -2298,6 +2644,8 @@ function processSumpAnalytics(sumpData) {
         previousGapEl.textContent = formatDurationAutoScale(previousSumpCycleGapMs);
     }
 
+    renderSumpStats(sumpData);
+
     // Build a DENSE, continuous day-by-day series -- from the earliest day
     // in the fetched window through TODAY (inclusive) -- rather than only
     // the sparse set of days that actually had a cycle. Previously, days
@@ -2336,6 +2684,66 @@ function processSumpAnalytics(sumpData) {
         sumpRunsPerDayChartInstance.update();
     }
 }
+function medianOf(values) {
+    if (!values.length) return null;
+    const sorted = values.slice().sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+// Sump statistics cards: cycles and average gap over the last 24 hours, and
+// a run-time trend -- the median run time of the 10 most recent cycles
+// against the median of the 30 days before them. A pump that takes
+// noticeably longer than it used to for the same pit is the early sign of a
+// failing pump, a sticking check valve or a partly blocked discharge line.
+function renderSumpStats(sumpData) {
+    const cycles = sumpData
+        .filter(d => d.runTime > 0)
+        .sort((a, b) => a.ts.getTime() - b.ts.getTime());
+    const now = Date.now();
+    const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+
+    const last24 = cycles.filter(c => now - c.ts.getTime() <= 24 * 3600000);
+    setText('sump-cycles-24h', String(last24.length));
+    setText('sump-avg-gap-24h', last24.length >= 2
+        ? formatDurationAutoScale((last24[last24.length - 1].ts.getTime() - last24[0].ts.getTime()) / (last24.length - 1))
+        : '--');
+
+    // Until the first live event arrives, "Last Run Time" comes from the
+    // newest cycle in the sheet.
+    if (sumpRuntimeElement && sumpRuntimeElement.textContent.trim() === '--' && cycles.length > 0) {
+        sumpRuntimeElement.textContent = cycles[cycles.length - 1].runTime.toFixed(1);
+    }
+
+    const RECENT_CYCLES = 10;
+    const MIN_BASELINE_CYCLES = 20;
+    const trendEl = document.getElementById('sump-runtime-trend');
+    if (!trendEl) return;
+    const trendCard = trendEl.closest('.temp-card');
+    let trendText = '--';
+    let warn = false;
+    if (cycles.length >= RECENT_CYCLES + MIN_BASELINE_CYCLES) {
+        const recent = cycles.slice(-RECENT_CYCLES);
+        const baselineEndMs = recent[0].ts.getTime();
+        const baseline = cycles.filter(c => {
+            const t = c.ts.getTime();
+            return t < baselineEndMs && t >= baselineEndMs - 30 * 24 * 3600000;
+        });
+        if (baseline.length >= MIN_BASELINE_CYCLES) {
+            const baseMedian = medianOf(baseline.map(c => c.runTime));
+            const recentMedian = medianOf(recent.map(c => c.runTime));
+            if (baseMedian > 0) {
+                const pct = (recentMedian / baseMedian - 1) * 100;
+                trendText = `${pct >= 0 ? '+' : ''}${pct.toFixed(0)}%`;
+                const warnPct = typeof SUMP_RUNTIME_TREND_WARN_PCT !== 'undefined' ? SUMP_RUNTIME_TREND_WARN_PCT : 25;
+                warn = pct > warnPct;
+            }
+        }
+    }
+    trendEl.textContent = trendText;
+    if (trendCard) trendCard.classList.toggle('limit-high', warn);
+}
+
 /**
  * Fetches the full sump history CSV for the last 90 days and processes it.
  * This runs independently of the dropdown-controlled history fetches.
@@ -2348,16 +2756,11 @@ function fetchSumpAnalyticsData() {
         return;
     }
 
-    fetch(SUMP_HISTORY_CSV_URL)
-        .then(response => {
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            return response.text();
-        })
-        .then(csvText => {
-            const lines = csvText.trim().split('\n');
+    fetchCsvLines(SUMP_HISTORY_CSV_URL, SUMP_CSV_MAX_AGE_MS, { keepDays: 100 })
+        .then(lines => {
             if (lines.length <= 1) return;
 
-            const header = lines.shift().split(',');
+            const header = lines[0].split(',');
             const tsIdx = header.findIndex(h => h.toLowerCase().includes('timestamp'));
             const sinceRunIdx = header.findIndex(h => h.toLowerCase().includes('timesince'));
             // --- FIX: Also find the sumpRunTime column ---
@@ -2447,6 +2850,9 @@ async function fetchFridgeHeaterState() {
 function promptForActionPin() {
   return prompt("Enter PIN to confirm this action:");
 }
+// Shown when the Worker has temporarily locked PIN entry after repeated
+// wrong guesses (HTTP 429).
+const PIN_LOCKED_MESSAGE = "Too many wrong PIN attempts. Try again in 15 minutes.";
 
 function updateFridgeButton(isEnabled) {
   fridgeButton.textContent = isEnabled ? "Disable Fridge Heater" : "Enable Fridge Heater";
@@ -2476,6 +2882,10 @@ async function toggleFridgeHeater() {
       alert("Incorrect PIN.");
       return;
     }
+    if (resp.status === 429) {
+      alert(PIN_LOCKED_MESSAGE);
+      return;
+    }
     const data = await resp.json();
     if (data && data.return_value !== undefined) {
       // After a successful command, re-fetch the state to update the button.
@@ -2489,12 +2899,13 @@ async function toggleFridgeHeater() {
     alert("Error toggling Fridge Heater.");
   }
 }
-// Init
-fetchFridgeHeaterState();
 
 // ===== DEVICE RESET FUNCTIONALITY (Options 1 & 3) =====
 const resetButton = document.getElementById("device-reset-button");
 const resetStatus = document.getElementById("device-reset-status");
+// The button's own label, restored after every attempt (it used to come
+// back under a different name than it started with).
+const resetButtonLabel = resetButton ? resetButton.textContent.trim() : "";
 
 if (resetButton) {
   console.log("✅ Reset button found and listener attached");
@@ -2529,7 +2940,14 @@ if (resetButton) {
         resetStatus.textContent = "❌ Incorrect PIN.";
         resetStatus.style.color = "red";
         resetButton.disabled = false;
-        resetButton.textContent = "🔄 Reset Photon Device";
+        resetButton.textContent = resetButtonLabel;
+        return;
+      }
+      if (resp.status === 429) {
+        resetStatus.textContent = "❌ " + PIN_LOCKED_MESSAGE;
+        resetStatus.style.color = "red";
+        resetButton.disabled = false;
+        resetButton.textContent = resetButtonLabel;
         return;
       }
       
@@ -2545,7 +2963,7 @@ if (resetButton) {
         // Re-enable button after 30 seconds
         setTimeout(() => {
           resetButton.disabled = false;
-          resetButton.textContent = "🔄 Reset Photon Device";
+          resetButton.textContent = resetButtonLabel;
           resetStatus.textContent = "";
         }, 30000);
       } else {
@@ -2556,7 +2974,7 @@ if (resetButton) {
       resetStatus.textContent = "❌ Error: " + error.message;
       resetStatus.style.color = "red";
       resetButton.disabled = false;
-      resetButton.textContent = "🔄 Reset Photon Device";
+      resetButton.textContent = resetButtonLabel;
     }
   });
 }
@@ -2565,6 +2983,7 @@ if (resetButton) {
 // ===== AQUARIUM SENSOR RESET =====
 const aquariumResetButton = document.getElementById("aquarium-reset-button");
 const aquariumResetStatus = document.getElementById("aquarium-reset-status");
+const aquariumResetButtonLabel = aquariumResetButton ? aquariumResetButton.textContent.trim() : "";
 
 if (aquariumResetButton) {
   aquariumResetButton.addEventListener("click", async function () {
@@ -2590,7 +3009,14 @@ if (aquariumResetButton) {
         aquariumResetStatus.textContent = "❌ Wrong PIN";
         aquariumResetStatus.style.color = "red";
         aquariumResetButton.disabled = false;
-        aquariumResetButton.textContent = "↺ Reset Sensor";
+        aquariumResetButton.textContent = aquariumResetButtonLabel;
+        return;
+      }
+      if (resp.status === 429) {
+        aquariumResetStatus.textContent = "❌ " + PIN_LOCKED_MESSAGE;
+        aquariumResetStatus.style.color = "red";
+        aquariumResetButton.disabled = false;
+        aquariumResetButton.textContent = aquariumResetButtonLabel;
         return;
       }
 
@@ -2600,7 +3026,7 @@ if (aquariumResetButton) {
         aquariumResetStatus.style.color = "green";
         setTimeout(() => {
           aquariumResetButton.disabled = false;
-          aquariumResetButton.textContent = "↺ Reset Sensor";
+          aquariumResetButton.textContent = aquariumResetButtonLabel;
           aquariumResetStatus.textContent = "";
         }, 30000);
       } else {
@@ -2610,17 +3036,78 @@ if (aquariumResetButton) {
       aquariumResetStatus.textContent = "❌ " + err.message;
       aquariumResetStatus.style.color = "red";
       aquariumResetButton.disabled = false;
-      aquariumResetButton.textContent = "↺ Reset Sensor";
+      aquariumResetButton.textContent = aquariumResetButtonLabel;
     }
   });
 }
 // ===== END AQUARIUM SENSOR RESET =====
 
 
+// ===== TEST ALERT =====
+// Sends one test notification through the Worker's alert channel, so the
+// path from Worker to phone can be confirmed without waiting for a failure.
+const alertTestButton = document.getElementById("alert-test-button");
+const alertTestStatus = document.getElementById("alert-test-status");
+
+if (alertTestButton) {
+  alertTestButton.addEventListener("click", async function () {
+    const pin = promptForActionPin();
+    if (pin === null) return;
+
+    alertTestButton.disabled = true;
+    alertTestStatus.textContent = "Sending…";
+    alertTestStatus.style.color = "orange";
+    try {
+      const resp = await fetch(`${PARTICLE_PROXY_BASE_URL}/alert-test`, {
+        method: "POST",
+        headers: { "X-Action-Pin": pin },
+      });
+      if (resp.status === 403) throw new Error("Wrong PIN");
+      if (resp.status === 429) throw new Error(PIN_LOCKED_MESSAGE);
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.sent) throw new Error(data.error || `HTTP ${resp.status}`);
+      alertTestStatus.textContent = "✅ Test alert sent. It should reach your phone within a minute.";
+      alertTestStatus.style.color = "green";
+    } catch (err) {
+      alertTestStatus.textContent = "❌ " + err.message;
+      alertTestStatus.style.color = "red";
+    } finally {
+      alertTestButton.disabled = false;
+    }
+  });
+}
+// ===== END TEST ALERT =====
+
+
 // ================================
 // Global status dot
 // ================================
-const statusPageLoadMs = Date.now();
+// Green when everything is in range and reporting; red when any card is
+// outside its limits, a connection has been down for a while, or a source
+// has gone quiet. Tapping the dot opens a list of what is wrong.
+const statusCfg = {
+    tempStaleMin: typeof STATUS_TEMP_MONITOR_STALE_MIN !== 'undefined' ? STATUS_TEMP_MONITOR_STALE_MIN : 15,
+    sumpStaleMin: typeof STATUS_SUMP_STALE_MIN !== 'undefined' ? STATUS_SUMP_STALE_MIN : 10,
+    aquariumStaleMin: typeof STATUS_AQUARIUM_STALE_MIN !== 'undefined' ? STATUS_AQUARIUM_STALE_MIN : 15,
+    nestStaleMin: typeof STATUS_NEST_STALE_MIN !== 'undefined' ? STATUS_NEST_STALE_MIN : 20,
+    connGraceSec: typeof STATUS_CONN_GRACE_SEC !== 'undefined' ? STATUS_CONN_GRACE_SEC : 60,
+    startupGraceSec: typeof STATUS_STARTUP_GRACE_SEC !== 'undefined' ? STATUS_STARTUP_GRACE_SEC : 30,
+};
+
+// When each connection was first seen in a bad state. A live stream that
+// drops and reconnects within a few seconds is routine and shouldn't flash
+// the dot red; only a connection that stays bad counts.
+const connBadSinceMs = {};
+
+function connectionProblem(key, label, value, now) {
+    if (!/error|closed|config/i.test(value || '')) {
+        connBadSinceMs[key] = null;
+        return null;
+    }
+    if (!connBadSinceMs[key]) connBadSinceMs[key] = now;
+    if (now - connBadSinceMs[key] < statusCfg.connGraceSec * 1000) return null;
+    return `${label} connection: ${value}`;
+}
 
 function collectStatusProblems() {
     const problems = [];
@@ -2634,21 +3121,32 @@ function collectStatusProblems() {
     });
 
     // 2. Live connections
-    const badConn = (v) => /error|closed|config/i.test(v || '');
-    if (badConn(diagState.tempConn)) problems.push(`Fridge monitor connection: ${diagState.tempConn}`);
-    if (badConn(diagState.sumpConn)) problems.push(`Sump monitor connection: ${diagState.sumpConn}`);
-    if (badConn(diagState.aquariumConn)) problems.push(`Aquarium connection: ${diagState.aquariumConn}`);
-    if (nestStatusElement && /error/i.test(nestStatusElement.textContent)) problems.push('Nest data error');
+    for (const p of [
+        connectionProblem('temp', 'Fridge monitor', diagState.tempConn, now),
+        connectionProblem('sump', 'Sump monitor', diagState.sumpConn, now),
+        connectionProblem('aquarium', 'Aquarium', diagState.aquariumConn, now),
+    ]) {
+        if (p) problems.push(p);
+    }
+    if (nestStatusElement && /^error/i.test(nestStatusElement.textContent)) problems.push('Indoor climate data error');
     if (tempMonitorStatusElement && /data error/i.test(tempMonitorStatusElement.textContent)) problems.push('Fridge monitor data error');
     if (sumpMonitorStatusElement && /data error/i.test(sumpMonitorStatusElement.textContent)) problems.push('Sump monitor data error');
 
-    // 3. Stale data
-    const tempRef = diagState.tempLastEventMs || statusPageLoadMs;
-    if (now - tempRef > STATUS_TEMP_MONITOR_STALE_MIN * 60000) {
-        problems.push(`Fridge monitor silent for ${Math.round((now - tempRef) / 60000)} min`);
+    // 3. Sources that have gone quiet
+    const minutesSince = ms => Math.round((now - ms) / 60000);
+    const tempRef = Math.max(diagState.tempLastEventMs || 0, statusBaselineMs);
+    if (now - tempRef > statusCfg.tempStaleMin * 60000) {
+        problems.push(`Fridge monitor silent for ${minutesSince(tempRef)} min`);
     }
-    if (aquariumLastReadingMs && now - aquariumLastReadingMs > STATUS_AQUARIUM_STALE_MIN * 60000) {
-        problems.push(`Aquarium data stale (${Math.round((now - aquariumLastReadingMs) / 60000)} min)`);
+    const sumpRef = Math.max(diagState.sumpLastEventMs || 0, statusBaselineMs);
+    if (now - sumpRef > statusCfg.sumpStaleMin * 60000) {
+        problems.push(`Sump monitor silent for ${minutesSince(sumpRef)} min`);
+    }
+    if (aquariumLastReadingMs && now - aquariumLastReadingMs > statusCfg.aquariumStaleMin * 60000) {
+        problems.push(`Aquarium: no new reading for ${minutesSince(aquariumLastReadingMs)} min`);
+    }
+    if (nestLatestMs && now - nestLatestMs > statusCfg.nestStaleMin * 60000) {
+        problems.push(`Indoor climate: no new reading for ${minutesSince(nestLatestMs)} min`);
     }
     return problems;
 }
@@ -2656,15 +3154,59 @@ function collectStatusProblems() {
 function updateGlobalStatus() {
     const dot = document.getElementById('global-status-dot');
     const wrap = document.getElementById('global-status');
+    const panel = document.getElementById('global-status-panel');
     if (!dot || !wrap) return;
-    if (Date.now() - statusPageLoadMs < STATUS_STARTUP_GRACE_SEC * 1000) {
-        dot.className = 'status-checking';
-        wrap.title = 'Checking...';
-        return;
+
+    let state, lines;
+    if (Date.now() - statusBaselineMs < statusCfg.startupGraceSec * 1000) {
+        state = 'status-checking';
+        lines = ['Checking…'];
+    } else {
+        const problems = collectStatusProblems();
+        state = problems.length ? 'status-bad' : 'status-ok';
+        lines = problems.length ? problems : ['All systems normal'];
     }
-    const problems = collectStatusProblems();
-    dot.className = problems.length ? 'status-bad' : 'status-ok';
-    wrap.title = problems.length ? problems.join('\n') : 'All systems normal';
+    dot.className = state;
+    wrap.title = lines.join('\n');
+    wrap.setAttribute('aria-label', `System status: ${lines.join('; ')}`);
+
+    if (panel) {
+        panel.className = state;
+        panel.replaceChildren(...lines.map(text => {
+            const row = document.createElement('div');
+            row.className = 'global-status-row';
+            row.textContent = text;
+            return row;
+        }));
+    }
 }
+
+// Tap/click the dot to open the list; tap anywhere else (or press Escape)
+// to close it. Hover tooltips don't exist on touch screens, so the title
+// attribute alone left phones with no way to see what was wrong.
+(function wireStatusPanel() {
+    const wrap = document.getElementById('global-status');
+    const panel = document.getElementById('global-status-panel');
+    if (!wrap || !panel) return;
+    const setOpen = open => {
+        panel.hidden = !open;
+        wrap.setAttribute('aria-expanded', String(open));
+    };
+    wrap.addEventListener('click', event => {
+        event.stopPropagation();
+        updateGlobalStatus();
+        setOpen(panel.hidden);
+    });
+    document.addEventListener('click', event => {
+        if (!panel.hidden && !panel.contains(event.target)) setOpen(false);
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') setOpen(false);
+    });
+    // Also close on scroll: a tap on the embedded radar map never reaches
+    // this page, so "tap elsewhere" alone can't be relied on there.
+    window.addEventListener('scroll', () => { if (!panel.hidden) setOpen(false); }, { passive: true });
+})();
+
 setInterval(updateGlobalStatus, 5000);
 updateGlobalStatus();

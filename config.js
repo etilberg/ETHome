@@ -53,8 +53,8 @@ const AQUARIUM_DEVICE_ID = '230043001347353136383631';
 const AQUARIUM_WATER_CSV_URL   = 'https://io.adafruit.com/api/v2/etilberg/feeds/aquarium-water-temp/data';
 const AQUARIUM_AMBIENT_CSV_URL = 'https://io.adafruit.com/api/v2/etilberg/feeds/aquarium-ambient-temp/data';
 
-// Alarm display thresholds — for coloring the live reading on the card
-// (actual push alerts come from the BL602 firmware)
+// Legacy thresholds, no longer read by the dashboard -- the card colour and
+// the chart limit lines both come from CARD_LIMITS.aquariumWater below.
 const AQUARIUM_WATER_HIGH_F  = 81.0;
 const AQUARIUM_WATER_LOW_F   = 77.0;
 
@@ -95,6 +95,16 @@ const CARD_LIMITS = {
 // -- Global status dot (top bar) ---------------------------------------------
 // Dot goes red if any card is out of its limits, a connection is lost/errored,
 // or a data source has gone quiet for longer than these thresholds (minutes).
-const STATUS_TEMP_MONITOR_STALE_MIN = 15;   // fridge/freezer/garage live feed
-const STATUS_AQUARIUM_STALE_MIN     = 2 * LOG_INTERVAL_MIN;
+const STATUS_TEMP_MONITOR_STALE_MIN = 15;   // fridge/freezer/garage live feed (publishes every 2 min)
+const STATUS_SUMP_STALE_MIN         = 10;   // sump live feed (publishes every 2 min)
+// 3x the logging interval: the page only polls Adafruit IO every 5 minutes,
+// so a perfectly healthy reading can look almost 10 minutes old.
+const STATUS_AQUARIUM_STALE_MIN     = 3 * LOG_INTERVAL_MIN;
+const STATUS_NEST_STALE_MIN         = 20;   // Worker stores a Nest reading every 5 min
+const STATUS_CONN_GRACE_SEC         = 60;   // a connection must stay down this long to count
 const STATUS_STARTUP_GRACE_SEC      = 30;   // stay grey while connections come up
+
+// -- Sump run-time trend -------------------------------------------------------
+// The "Run Time Trend" card turns red when the median run time of the 10 most
+// recent cycles is more than this many percent above the 30-day median.
+const SUMP_RUNTIME_TREND_WARN_PCT = 25;

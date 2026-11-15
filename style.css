@@ -1,3 +1,8 @@
+:root {
+    --text-muted: #9aa5ab;
+    --text-danger: #e24b4a;
+}
+
 body {
     font-family: Arial, sans-serif;
     line-height: 1.6;
@@ -192,12 +197,33 @@ h2 span {
     position: relative;
     margin: 15px auto;
     height: 20vh;
+    min-height: 170px;
     width: 90%;
     max-width: 600px;
     background-color: #222;
     padding: 10px;
     border-radius: 3px;
     border: 1px solid #333;
+    box-sizing: border-box;
+}
+
+/* Charts sit in a grid: one column on a phone (same as before), two or
+   three side by side on a wider screen instead of a single narrow column
+   with empty space either side. */
+.chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr));
+    gap: 15px;
+    margin: 15px 0;
+    align-items: start;
+}
+.chart-grid .chart-container {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+}
+.chart-grid .chart-cell {
+    min-width: 0;
 }
 
 #historical-chart-container-gsheets {
@@ -363,8 +389,10 @@ small {
 /* Limit-based card backgrounds (see CARD_LIMITS in config.js) */
 .temp-card.limit-low  { background-color: #1e4fa3; }
 .temp-card.limit-high { background-color: #a31e1e; }
-.temp-card.limit-low .temp-card-label,  .temp-card.limit-high .temp-card-label,
-.temp-card.limit-low .temp-card-stats,  .temp-card.limit-high .temp-card-stats { color: #ffffff; }
+/* Everything on a coloured card is white: the usual green value and the
+   red/cyan H/L numbers are unreadable (red on red) against these fills. */
+.temp-card.limit-low,  .temp-card.limit-high,
+.temp-card.limit-low *, .temp-card.limit-high * { color: #ffffff !important; }
 .sump-precip-total { text-align: center; margin: 4px 0 12px; font-size: 0.95em; color: #b0bec5; }
 
 .temp-card-label {
@@ -396,8 +424,45 @@ small {
     color: #b0bec5;
 }
 
-/* Global status dot in the sticky bar */
-#global-status { display: flex; align-items: center; padding: 6px; cursor: help; }
+/* Global status dot in the sticky bar (a button: tap it to list problems) */
+#global-status {
+    display: flex; align-items: center; justify-content: center;
+    padding: 10px 14px; cursor: pointer;
+    background: none; border: 0; margin: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+#global-status:focus-visible { outline: 2px solid #90caf9; outline-offset: -4px; border-radius: 6px; }
+#global-status-panel {
+    position: fixed;
+    top: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1001;
+    min-width: 220px;
+    max-width: calc(100vw - 32px);
+    box-sizing: border-box;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-left: 4px solid #777;
+    border-radius: 6px;
+    padding: 8px 14px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+    font-size: 0.9rem;
+    color: #e0e0e0;
+}
+#global-status-panel[hidden] { display: none; }
+#global-status-panel.status-ok  { border-left-color: #2ecc71; }
+#global-status-panel.status-bad { border-left-color: #e74c3c; }
+.global-status-row { padding: 3px 0; overflow-wrap: anywhere; }
+.global-status-row + .global-status-row { border-top: 1px solid #3a3a3a; }
+
+.temp-card-unit { font-size: 0.75em; color: #b0bec5; line-height: 1.2; }
+.secondary-button {
+    background-color: #37474f; color: #ffffff;
+    padding: 10px 20px; cursor: pointer;
+    border: none; border-radius: 4px; font-weight: bold;
+}
+.secondary-button:disabled { opacity: 0.6; cursor: default; }
 #global-status-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; background: #777; }
 #global-status-dot.status-ok { background: #2ecc71; box-shadow: 0 0 6px #2ecc71; }
 #global-status-dot.status-bad { background: #e74c3c; box-shadow: 0 0 6px #e74c3c; }

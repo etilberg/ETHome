@@ -17,10 +17,10 @@
 #   PARTICLE_TOKEN     -- Particle Cloud access token
 #   NEST_CLIENT_SECRET -- Google OAuth Client Secret for the Nest integration
 #   NEST_REFRESH_TOKEN -- long-lived Nest OAuth refresh token
-#   ACTION_PIN         -- PIN required to call /reset-device or
-#                         /fridge-heater-toggle. Unlike the others, this one
-#                         fails CLOSED if unset (blocks both actions), so
-#                         set it as part of this same deploy.
+#   ACTION_PIN         -- PIN required for the heater toggle, the board
+#                         resets and the test alert. Unlike the others, this
+#                         one fails CLOSED if unset (blocks those actions),
+#                         so set it as part of this same deploy.
 
 name = "ethome"
 main = "worker.js"
@@ -28,6 +28,17 @@ compatibility_date = "2026-08-01"
 
 [observability]
 enabled = true
+
+# Plain (non-secret) settings. Declared here, not in the dashboard, so a
+# deploy can't wipe them.
+#
+# ALERTS_ENABLED: "true" lets the 5-minute health check send phone
+# notifications (as a Particle "pushbullet" event) when the Nest data or one
+# of the Particle boards has been down for 10+ minutes. With "false" the
+# check still runs and GET /health still reports what it sees, but nothing
+# is sent.
+[vars]
+ALERTS_ENABLED = "false"
 
 [triggers]
 crons = ["*/5 * * * *"]

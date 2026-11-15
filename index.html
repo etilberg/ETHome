@@ -4,8 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ET Home Dashboard</title>
-    <link rel="stylesheet" href="style.css?v=3">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <meta name="theme-color" content="#1e1e1e">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="favicon.ico">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ET Home">
+    <link rel="stylesheet" href="style.css?v=4">
+    <!-- Pinned to major version 4 so a future Chart.js 5 can't break the page unannounced. -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/moment@^2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@^1"></script>
     <!-- Zoom plugin: pan/zoom interactions are disabled (see script.js chart
@@ -20,7 +29,7 @@
             <span id="sticky-temp-value">--°F</span>
             <span id="sticky-temp-label">Outdoor</span>
         </div>
-        <div id="global-status" title="Checking..."><span id="global-status-dot" class="status-checking"></span></div>
+        <button type="button" id="global-status" title="Checking..." aria-label="System status" aria-expanded="false" aria-controls="global-status-panel"><span id="global-status-dot" class="status-checking"></span></button>
         <div id="sticky-range-control">
             <label for="history-range">History:</label>
             <select id="history-range">
@@ -34,6 +43,7 @@
             </select>
         </div>
     </div>
+    <div id="global-status-panel" class="status-checking" hidden></div>
     <div id="weather-display-container">
     <div id="current-weather">
         <img id="current-icon" class="weather-icon" src="" alt="" />
@@ -107,14 +117,16 @@
             </div>
           </div>
           <h3>Fridge/Freezer History</h3>
-        <div class="chart-container">
-            <canvas id="fridgeChart"></canvas>
-        </div>
-        <div class="chart-container">
-            <canvas id="freezerChart"></canvas>
-        </div>
-        <div class="chart-container">
-            <canvas id="garageChart"></canvas>
+        <div class="chart-grid">
+            <div class="chart-container">
+                <canvas id="fridgeChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="freezerChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="garageChart"></canvas>
+            </div>
         </div>
         <p><small>Last updated: <span id="temp-monitor-last-updated">Never</span></small></p>
     </section>
@@ -142,14 +154,31 @@
                 <div class="temp-card-label">Previous Cycle Gap</div>
                 <div class="temp-card-current" id="sump-previous-gap">--</div>
             </div>
+            <div class="temp-card">
+                <div class="temp-card-label">Cycles (24 hr)</div>
+                <div class="temp-card-current" id="sump-cycles-24h">--</div>
+            </div>
+            <div class="temp-card">
+                <div class="temp-card-label">Avg Gap (24 hr)</div>
+                <div class="temp-card-current" id="sump-avg-gap-24h">--</div>
+            </div>
+            <div class="temp-card">
+                <div class="temp-card-label">Run Time Trend</div>
+                <div class="temp-card-current" id="sump-runtime-trend">--</div>
+                <div class="temp-card-stats">last 10 vs 30-day median</div>
+            </div>
           </div>
          
     <h3>Sump Pump History</h3>
-        <div class="chart-container chart-container-large"><canvas id="sumpRunsPerDayChart"></canvas></div>
-        <div class="chart-container"><canvas id="sumpSinceRunChart"></canvas></div>
-        <div class="sump-precip-total" id="sump-precip-total">Total precipitation: --</div>
-        <div class="chart-container"><canvas id="sumpRuntimeChart"></canvas></div>
-        <div class="chart-container"><canvas id="sumpTempChart"></canvas></div>
+        <div class="chart-grid">
+            <div class="chart-container chart-container-large"><canvas id="sumpRunsPerDayChart"></canvas></div>
+            <div class="chart-cell">
+                <div class="chart-container"><canvas id="sumpSinceRunChart"></canvas></div>
+                <div class="sump-precip-total" id="sump-precip-total">Total precipitation: --</div>
+            </div>
+            <div class="chart-container"><canvas id="sumpRuntimeChart"></canvas></div>
+            <div class="chart-container"><canvas id="sumpTempChart"></canvas></div>
+        </div>
     <p><small>Last updated: <span id="sump-monitor-last-updated">Never</span></small></p>
     </section>
 
@@ -173,19 +202,26 @@
                 <div class="temp-card-current"><span class="hvac-heating" id="nest-duty-heat">--%</span> / <span class="hvac-cooling" id="nest-duty-cool">--%</span></div>
             </div>
         </div>
-        <div class="chart-container chart-container-large">
-            <canvas id="nestChart"></canvas>
+        <div class="chart-grid">
+            <div class="chart-container chart-container-large">
+                <canvas id="nestChart"></canvas>
+            </div>
+            <div class="chart-container chart-container-large">
+                <canvas id="hvacDailyChart"></canvas>
+            </div>
         </div>
         <p><small>Last updated: <span id="nest-last-updated">Never</span></small></p>
     </section>
 
     <section id="katy-weather-section">
         <h2>Weather History (<span id="katy-weather-status">Initializing...</span>)</h2>
-        <div class="chart-container chart-container-large">
-            <canvas id="katyWeatherChart"></canvas>
-        </div>
-        <div class="chart-container chart-container-large">
-            <canvas id="katyWindChart"></canvas>
+        <div class="chart-grid">
+            <div class="chart-container chart-container-large">
+                <canvas id="katyWeatherChart"></canvas>
+            </div>
+            <div class="chart-container chart-container-large">
+                <canvas id="katyWindChart"></canvas>
+            </div>
         </div>
         <p><small>Last updated: <span id="katy-weather-last-updated">Never</span></small></p>
     </section>
@@ -220,8 +256,10 @@
 
       </div>
 
-      <div class="chart-container">
-        <canvas id="aquariumChart"></canvas>
+      <div class="chart-grid">
+        <div class="chart-container">
+          <canvas id="aquariumChart"></canvas>
+        </div>
       </div>
 
       <div class="card-footer" style="font-size:0.8rem;color:var(--text-muted)">
@@ -283,7 +321,7 @@
 
   <div style="text-align: center; margin-top: 20px; padding-top: 15px; border-top: 1px solid #333;">
     <button id="device-reset-button" style="background-color: #ff6b6b; color: white; padding: 10px 20px; margin-top: 20px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold;">
-      🔄 Reset Frige Photon
+      🔄 Reset Fridge Photon
     </button>
     <div id="device-reset-status" style="margin-top: 10px; font-size: 14px;"></div>
     <button id="aquarium-reset-button" style="background-color: #ff6b6b; color: white; padding: 10px 20px; margin-top: 20px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold;">
@@ -291,10 +329,15 @@
     </button>
     <div id="aquarium-reset-status" style="margin-top: 10px; font-size: 14px;"></div>
   </div>
+
+  <div style="text-align: center; margin-top: 20px; padding-top: 15px; border-top: 1px solid #333;">
+    <button id="alert-test-button" class="secondary-button">🔔 Send Test Alert</button>
+    <div id="alert-test-status" style="margin-top: 10px; font-size: 14px;"></div>
+  </div>
 </details>
 
     <!-- PUT NOTHING AFTER THESE LINES -->
-    <script src="config.js?v=6"></script>
-    <script src="script.js?v=12"></script>
+    <script src="config.js?v=7"></script>
+    <script src="script.js?v=13"></script>
 </body>
 </html>
