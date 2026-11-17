@@ -133,9 +133,16 @@ whether or not alerts are on, and the dashboard's **Send Test Alert** button
 
 **Daily HVAC totals.** Each poll also stores the outdoor temperature (NWS
 station KATY) with the reading and adds to a per-day total of heating and
-cooling minutes, kept for 90 days under the `nest:daily` KV key and served
-at `GET /nest/daily`. This doubles KV writes to about 576 a day, inside the
-free tier's 1,000.
+cooling minutes, kept for 90 days and served at `GET /nest/daily`.
+
+**One KV write per poll.** The 7-day reading history and the daily totals
+share a single KV key, `nest:data` (`{ history, daily }`, about 180 KB), so
+each 5-minute poll is one write: about 288 a day against the free plan's
+1,000-a-day limit, which is shared by the whole account. The PIN lockout
+counter and the alert state add a write only when something actually
+happens. Before Nov 17, 2026 these were two keys (`nest:history` and
+`nest:daily`); the Worker reads them once if `nest:data` is missing, then
+deletes them on the following poll.
 
 **PIN lockout.** Five wrong PINs from one address lock the PIN-protected
 routes for that address for 15 minutes (HTTP 429). It is still a deterrent,

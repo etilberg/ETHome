@@ -40,17 +40,26 @@ const NEST_CLIENT_ID = "406796196865-vbbfrmegqiec5lq9q8ldqn2lj1ipr7v8.apps.googl
 const NEST_DEVICE_NAME = "enterprises/c8083249-ed39-477e-8922-a2ee4a1eccdd/devices/AVPHwEuzGOZULzgQujC6_8Q_YuRvsHLts6ccrX1kxcCwxRAH02vkoADSnNEQDd2kaGzctxC_zQ6s80JWV4vEsMNRDszVnw";
 // Nest's API only exposes *current* state, not history, so this Worker
 // builds its own history by polling on a Cron Trigger (see `scheduled`
-// below) and storing readings in KV -- a single JSON array under one key,
-// trimmed to a retention window, rather than one KV entry per reading (KV's
-// free tier is generous on reads but tight on writes/lists).
-const NEST_HISTORY_KV_KEY = "nest:history";
+// below) and storing it in KV.
+//
+// Everything Nest-related lives under ONE key, { history, daily }, so each
+// poll costs exactly one KV write. KV's free plan allows 1,000 writes a day
+// for the whole account; a poll every 5 minutes is 288 of them, and the two
+// separate keys this used to use doubled that to 576.
+//   history -- raw readings, trimmed to NEST_HISTORY_RETENTION_MS
+//   daily   -- per-day HVAC totals ({ heatMin, coolMin, ... } per local
+//              day), kept much longer than the raw history
+const NEST_DATA_KV_KEY = "nest:data";
+// The two keys used before they were combined. Read only as a fallback
+// until the combined key exists, then deleted once (see pollNestAndStore).
+const LEGACY_NEST_HISTORY_KV_KEY = "nest:history";
+const LEGACY_NEST_DAILY_KV_KEY = "nest:daily";
 const NEST_HISTORY_RETENTION_MS = 7 * 24 * 3600 * 1000; // 7 days
 const NEST_POLL_MINUTES = 5; // must match the cron schedule in wrangler.toml
-
-// Per-day HVAC run time, kept much longer than the raw history: one small
-// object per day ({ heatMin, coolMin, ... }) under a single key.
-const NEST_DAILY_KV_KEY = "nest:daily";
 const NEST_DAILY_RETENTION_DAYS = 90;
+// KV's per-value limit is 25 MB; the combined value is ~180 KB. Log a
+// warning long before it could matter.
+const NEST_DATA_WARN_BYTES = 5 * 1024 * 1024;
 // Days are split at local midnight, not UTC midnight.
 const LOCAL_TIME_ZONE = "America/Chicago";
 // NWS observation station used for the outdoor temperature stored with each
@@ -194,18 +203,18 @@ export default {
             // to a live call here, and it keeps Google API usage bounded and
             // predictable regardless of how often the dashboard is loaded.
             if (url.pathname === "/nest/current" && request.method === "GET") {
-                const history = await readNestHistory(env);
+                const { history } = await readNestData(env);
                 const latest = history.length > 0 ? history[history.length - 1] : null;
                 return jsonResponse(JSON.stringify({ latest }), 200, corsHeaders);
             }
 
             if (url.pathname === "/nest/history" && request.method === "GET") {
-                const history = await readNestHistory(env);
+                const { history } = await readNestData(env);
                 return jsonResponse(JSON.stringify({ history }), 200, corsHeaders);
             }
 
             if (url.pathname === "/nest/daily" && request.method === "GET") {
-                const daily = (await readNestDaily(env)) || {};
+                const daily = (await readNestData(env)).daily || {};
                 return jsonResponse(JSON.stringify({ daily: formatNestDaily(daily) }), 200, corsHeaders);
             }
 
@@ -306,14 +315,36 @@ async function pinGate(request, env, corsHeaders) {
 
 // --- Nest helpers ---
 
-async function readNestHistory(env) {
-    const raw = await env.NEST_KV.get(NEST_HISTORY_KV_KEY);
-    return raw ? JSON.parse(raw) : [];
-}
+// Returns { history, daily, fromLegacy, legacyCleaned }:
+//   history       -- array of readings, oldest first ([] if none)
+//   daily         -- per-day totals object, or null if none stored yet
+//   fromLegacy    -- true when the combined key doesn't exist yet and the
+//                    data came from the two old keys
+//   legacyCleaned -- whether the old keys have already been deleted
+// One KV read once migrated; the old keys are read only while the combined
+// key is missing.
+async function readNestData(env) {
+    const raw = await env.NEST_KV.get(NEST_DATA_KV_KEY);
+    if (raw) {
+        const data = JSON.parse(raw);
+        return {
+            history: Array.isArray(data.history) ? data.history : [],
+            daily: data.daily && typeof data.daily === "object" ? data.daily : null,
+            fromLegacy: false,
+            legacyCleaned: data.legacyCleaned === true,
+        };
+    }
 
-async function readNestDaily(env) {
-    const raw = await env.NEST_KV.get(NEST_DAILY_KV_KEY);
-    return raw ? JSON.parse(raw) : null;
+    const [rawHistory, rawDaily] = await Promise.all([
+        env.NEST_KV.get(LEGACY_NEST_HISTORY_KV_KEY),
+        env.NEST_KV.get(LEGACY_NEST_DAILY_KV_KEY),
+    ]);
+    return {
+        history: rawHistory ? JSON.parse(rawHistory) : [],
+        daily: rawDaily ? JSON.parse(rawDaily) : null,
+        fromLegacy: true,
+        legacyCleaned: false,
+    };
 }
 
 // Google access tokens last 1 hour; the refresh token is long-lived (unless
@@ -439,35 +470,64 @@ async function pollNestAndStore(env) {
         const reading = await fetchNestDeviceState(env);
         reading.outdoorTemp = await fetchOutdoorTempF();
 
-        const history = await readNestHistory(env);
+        const stored = await readNestData(env);
+        const history = stored.history;
         const previousT = history.length > 0 ? history[history.length - 1].t : null;
         history.push(reading);
 
         const cutoff = Date.now() - NEST_HISTORY_RETENTION_MS;
         const trimmed = history.filter(r => r.t >= cutoff);
 
-        await env.NEST_KV.put(NEST_HISTORY_KV_KEY, JSON.stringify(trimmed));
-        console.log(`DEBUG: Nest poll OK, history now ${trimmed.length} points.`);
-
-        // Per-day totals. A failure here must not undo the reading above.
+        // Per-day totals. A problem here must not cost the reading itself,
+        // so on failure the previous totals are stored unchanged.
+        let daily = stored.daily;
         try {
-            let daily = await readNestDaily(env);
+            const updated = daily === null ? {} : structuredClone(daily);
             if (daily === null) {
-                // First run: rebuild what we can from the raw history
-                // (which already includes the reading just taken).
-                daily = {};
+                // Nothing stored yet: rebuild what we can from the raw
+                // history (which already includes the reading just taken).
                 let prev = null;
                 for (const r of trimmed) {
-                    addReadingToDaily(daily, r, prev);
+                    addReadingToDaily(updated, r, prev);
                     prev = r.t;
                 }
             } else {
-                addReadingToDaily(daily, reading, previousT);
+                addReadingToDaily(updated, reading, previousT);
             }
-            pruneNestDaily(daily, reading.t);
-            await env.NEST_KV.put(NEST_DAILY_KV_KEY, JSON.stringify(daily));
+            pruneNestDaily(updated, reading.t);
+            daily = updated;
         } catch (err) {
             console.error(`DEBUG: Nest daily totals update failed: ${err.message}`);
+        }
+
+        // The old keys are deleted on the first poll that finds the combined
+        // key already in place, not on the poll that first writes it: KV
+        // can take up to a minute to show a new key everywhere, and until
+        // then a reader elsewhere still falls back to the old keys, so they
+        // have to still be there.
+        const deleteLegacy = !stored.fromLegacy && !stored.legacyCleaned;
+
+        const body = JSON.stringify({ history: trimmed, daily: daily || {}, legacyCleaned: stored.legacyCleaned || deleteLegacy });
+        if (body.length > NEST_DATA_WARN_BYTES) {
+            console.warn(`DEBUG: nest:data is ${body.length} bytes -- approaching KV's 25 MB value limit`);
+        }
+
+        // The one KV write per poll.
+        await env.NEST_KV.put(NEST_DATA_KV_KEY, body);
+        console.log(`DEBUG: Nest poll OK, history now ${trimmed.length} points, ${Object.keys(daily || {}).length} days, ${body.length} bytes.`);
+
+        if (deleteLegacy) {
+            try {
+                await Promise.all([
+                    env.NEST_KV.delete(LEGACY_NEST_HISTORY_KV_KEY),
+                    env.NEST_KV.delete(LEGACY_NEST_DAILY_KV_KEY),
+                ]);
+                console.log("DEBUG: Removed the old nest:history and nest:daily keys.");
+            } catch (err) {
+                // Harmless if this fails: nothing reads the old keys once
+                // the combined key exists.
+                console.error(`DEBUG: Removing the old Nest keys failed: ${err.message}`);
+            }
         }
 
         return { ok: true, latestT: reading.t };
@@ -501,7 +561,7 @@ async function computeHealth(env, poll) {
     let nestLatestT = poll && poll.ok ? poll.latestT : null;
     if (nestLatestT === null) {
         try {
-            const history = await readNestHistory(env);
+            const { history } = await readNestData(env);
             nestLatestT = history.length > 0 ? history[history.length - 1].t : null;
         } catch (err) {
             notes.push(`Nest history unreadable: ${err.message}`);
